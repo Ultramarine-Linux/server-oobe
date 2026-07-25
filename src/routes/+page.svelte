@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { fixtureSteps, type StepId } from '$lib/oobe-state';
 
-	let selectedStep = $state<StepId>('network');
+	let selectedStep = $state<StepId>('internet');
 	let detecting = $state(false);
 	let tetraStatus = $state<'idle' | 'found' | 'missing'>('idle');
 
@@ -66,7 +66,7 @@
 				<span class="status-pill">Fixture mode</span>
 			</div>
 
-			{#if selectedStep === 'network'}
+			{#if selectedStep === 'internet'}
 				<div class="panel success-panel">
 					<div class="status-icon">✓</div>
 					<div>
