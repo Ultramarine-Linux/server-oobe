@@ -7,6 +7,10 @@
 		<link rel="icon" href="/ultramarine-favicon-32x32.png" type="image/png" sizes="32x32" />
 		<link rel="icon" href="/ultramarine-favicon-16x16.png" type="image/png" sizes="16x16" />
 		<link rel="apple-touch-icon" href="/ultramarine-apple-touch-icon.png" />
+		<script>
+			if (localStorage.getItem('oobe-theme') === 'dark')
+				document.documentElement.classList.add('dark');
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
