@@ -21,6 +21,8 @@
 	--card: var(--gray-50);
 	--muted: var(--gray-100);
 	--muted-foreground: var(--gray-600);
+	--um-accent-500: #505ed6;
+	--um-accent-600: #3a47b1;
 	--primary: var(--um-accent-600);
 	--primary-foreground: var(--gray-50);
 	--border: var(--gray-200);
@@ -58,6 +60,7 @@
 	--card: var(--gray-900);
 	--muted: var(--gray-800);
 	--muted-foreground: var(--gray-400);
+	--primary: var(--um-accent-500);
 	--primary-foreground: var(--gray-50);
 	--border: var(--gray-800);
 	--ring: var(--gray-500);
@@ -230,9 +233,23 @@ h3 {
 	background: var(--muted);
 }
 
-.theme-toggle img {
+.theme-icon {
 	width: 1.1rem;
 	height: 1.1rem;
+}
+
+.theme-icon-sun {
+	display: none;
+}
+
+:root.dark .theme-icon-moon {
+	display: none;
+	filter: invert(1);
+}
+
+:root.dark .theme-icon-sun {
+	display: block;
+	filter: invert(1);
 }
 
 .content-grid {
@@ -308,6 +325,10 @@ h3 {
 .step-copy small {
 	color: var(--gray-700);
 	font-size: 0.7rem;
+}
+
+:root.dark .step-copy small {
+	color: var(--gray-400);
 }
 
 .workspace {
@@ -395,6 +416,122 @@ h3 {
 	display: flex;
 	justify-content: flex-end;
 	gap: 0.6rem;
+}
+
+.step-content {
+	margin-bottom: 1.25rem;
+}
+
+.step-description {
+	color: var(--muted-foreground);
+	font-size: 0.85rem;
+	line-height: 1.5;
+}
+
+.field-label {
+	display: grid;
+	gap: 0.4rem;
+	margin: 0.9rem 0;
+	font-size: 0.8rem;
+	font-weight: 600;
+}
+
+.text-input {
+	width: 100%;
+	border: 1px solid var(--border);
+	background: var(--background);
+	color: var(--foreground);
+	padding: 0.65rem 0.75rem;
+	font-size: 0.85rem;
+}
+
+.field-error {
+	color: var(--foreground);
+	font-size: 0.8rem;
+	font-weight: 600;
+}
+
+.option-list {
+	display: grid;
+	gap: 0.5rem;
+	margin: 1rem 0;
+}
+
+.option {
+	display: grid;
+	gap: 0.2rem;
+	border: 1px solid var(--border);
+	background: transparent;
+	color: var(--foreground);
+	padding: 0.75rem;
+	text-align: left;
+}
+
+.option span,
+.toggle-option small,
+.summary-grid span {
+	color: var(--muted-foreground);
+	font-size: 0.75rem;
+}
+
+.option.selected {
+	border-color: var(--primary);
+	background: color-mix(in srgb, var(--primary) 10%, var(--background));
+}
+
+.option.selected span {
+	color: var(--foreground);
+}
+
+.split-fields {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 1rem;
+}
+
+.compact {
+	max-height: 15rem;
+	overflow-y: auto;
+}
+
+.toggle-option {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	border: 1px solid var(--border);
+	padding: 0.8rem;
+}
+
+.toggle-option span {
+	display: grid;
+	gap: 0.25rem;
+}
+
+.inline-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.6rem;
+}
+
+.status-note,
+.empty-message {
+	color: var(--muted-foreground);
+	font-size: 0.8rem;
+}
+
+.summary-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 0.75rem;
+	margin-bottom: 1rem;
+}
+
+.summary-grid div {
+	display: grid;
+	gap: 0.3rem;
+	border: 1px solid var(--border);
+	padding: 0.8rem;
 }
 
 @media (max-width: 700px) {

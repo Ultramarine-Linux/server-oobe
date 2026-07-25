@@ -1,35 +1,30 @@
 <script lang="ts">
-	import moonIcon from '$lib/icons/moon.svg';
-	import sunIcon from '$lib/icons/sun.svg';
-	import { fixtureSteps, type StepId } from '$lib/oobe-state';
+	import Shell from '$lib/components/Shell.svelte';
+	import LanguageStep from '$lib/components/steps/00-language.svelte';
+	import WelcomeStep from '$lib/components/steps/01-welcome.svelte';
+	import KeyboardStep from '$lib/components/steps/02-keyboard.svelte';
+	import DeviceNameStep from '$lib/components/steps/03-device-name.svelte';
+	import UserStep from '$lib/components/steps/04-user.svelte';
+	import PasswordStep from '$lib/components/steps/05-password.svelte';
+	import InternetStep from '$lib/components/steps/06-internet.svelte';
+	import TweaksStep from '$lib/components/steps/07-tweaks.svelte';
+	import TetraStep from '$lib/components/steps/08-tetra.svelte';
+	import FyraStep from '$lib/components/steps/09-fyra.svelte';
+	import CompleteStep from '$lib/components/steps/10-complete.svelte';
+	import { fixtureState, stepIndex, type StepId } from '$lib/oobe-state';
 
-	let selectedStep = $state<StepId>('internet');
-	let detecting = $state(false);
-	let tetraStatus = $state<'idle' | 'found' | 'missing'>('idle');
-	let theme = $state<'light' | 'dark'>('light');
+	let selectedStep = $state<StepId>(fixtureState.activeStep);
+	const steps = fixtureState.steps;
+	let currentIndex = $derived(stepIndex(selectedStep));
 
-	$effect(() => {
-		const storedTheme = localStorage.getItem('oobe-theme');
-		theme = storedTheme === 'dark' ? 'dark' : 'light';
-	});
-
-	$effect(() => {
-		document.documentElement.classList.toggle('dark', theme === 'dark');
-	});
-
-	const currentStep = $derived(fixtureSteps.find((step) => step.id === selectedStep));
-
-	function toggleTheme() {
-		theme = theme === 'light' ? 'dark' : 'light';
-		localStorage.setItem('oobe-theme', theme);
+	function selectStep(step: StepId) {
+		selectedStep = step;
 	}
-
-	async function detectTetra() {
-		detecting = true;
-		tetraStatus = 'idle';
-		await new Promise((resolve) => setTimeout(resolve, 600));
-		detecting = false;
-		tetraStatus = 'missing';
+	function back() {
+		if (currentIndex > 0) selectedStep = steps[currentIndex - 1].id;
+	}
+	function next() {
+		if (currentIndex < steps.length - 1) selectedStep = steps[currentIndex + 1].id;
 	}
 </script>
 
@@ -38,106 +33,28 @@
 	<meta name="description" content="Local first-run setup for an Ultramarine Server host." />
 </svelte:head>
 
-<main class="shell">
-	<header class="topbar">
-		<img class="brand-logo" src="/ultramarine-logo.svg" alt="" />
-		<div class="brand-copy">
-			<p class="eyebrow">Ultramarine Server</p>
-			<h1>Server setup</h1>
-		</div>
-		<span class="local-badge">Local setup</span>
-		<button
-			class="theme-toggle"
-			type="button"
-			onclick={toggleTheme}
-			aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-			title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-		>
-			<img src={theme === 'light' ? moonIcon : sunIcon} alt="" aria-hidden="true" />
-		</button>
-	</header>
-
-	<div class="content-grid">
-		<nav class="steps-card" aria-label="Setup steps">
-			<div class="card-heading">
-				<p class="eyebrow">First run</p>
-				<h2>Get your server ready</h2>
-			</div>
-			<div class="step-list">
-				{#each fixtureSteps as step, index}
-					<button
-						class:active={selectedStep === step.id}
-						class="step"
-						type="button"
-						onclick={() => (selectedStep = step.id)}
-					>
-						<span class:complete={step.status === 'complete'} class="step-number">
-							{step.status === 'complete' ? '✓' : index + 1}
-						</span>
-						<span class="step-copy">
-							<strong>{step.label}</strong>
-							<small>{step.description}</small>
-						</span>
-					</button>
-				{/each}
-			</div>
-		</nav>
-
-		<section class="workspace" aria-live="polite">
-			<div class="workspace-heading">
-				<div>
-					<p class="eyebrow">Step in progress</p>
-					<h2>{currentStep?.label ?? 'Setup'}</h2>
-				</div>
-				<span class="status-pill">Fixture mode</span>
-			</div>
-
-			{#if selectedStep === 'internet'}
-				<div class="panel success-panel">
-					<div class="status-icon">✓</div>
-					<div>
-						<h3>Network is ready to check</h3>
-						<p>
-							The real OOBE backend will report connectivity, hostname, and time synchronization
-							here.
-						</p>
-					</div>
-				</div>
-				<div class="panel">
-					<div class="panel-title">
-						<h3>Local environment</h3>
-						<span class="status-pill">Tetra</span>
-					</div>
-					<p>Detect Tetra on this server before connecting it to the global dashboard.</p>
-					{#if tetraStatus === 'missing'}
-						<div class="error-panel">
-							No local Tetra endpoint was found. Start Tetra and try again.
-						</div>
-					{/if}
-					<button class="primary-button" type="button" onclick={detectTetra} disabled={detecting}>
-						{detecting
-							? 'Detecting…'
-							: tetraStatus === 'found'
-								? 'Local Tetra found'
-								: 'Detect local Tetra'}
-					</button>
-				</div>
-			{:else}
-				<div class="panel empty-panel">
-					<div class="status-icon">{selectedStep === 'welcome' ? '✓' : '→'}</div>
-					<div>
-						<h3>{currentStep?.label}</h3>
-						<p>
-							This fixture screen establishes the visual state for the standalone OOBE application.
-						</p>
-					</div>
-				</div>
-			{/if}
-
-			<div class="actions">
-				<button class="secondary-button" type="button">Save and continue later</button>
-				<button class="primary-button" type="button">Continue</button>
-			</div>
-		</section>
-	</div>
-</main>
+<Shell {steps} {selectedStep} onSelect={selectStep}>
+	{#if selectedStep === 'welcome'}
+		<WelcomeStep onBack={back} onContinue={next} />
+	{:else if selectedStep === 'language'}
+		<LanguageStep onBack={back} onContinue={next} />
+	{:else if selectedStep === 'keyboard'}
+		<KeyboardStep onBack={back} onContinue={next} />
+	{:else if selectedStep === 'devicename'}
+		<DeviceNameStep onBack={back} onContinue={next} />
+	{:else if selectedStep === 'whoareyou'}
+		<UserStep onBack={back} onContinue={next} />
+	{:else if selectedStep === 'password'}
+		<PasswordStep onBack={back} onContinue={next} />
+	{:else if selectedStep === 'internet'}
+		<InternetStep onBack={back} onContinue={next} />
+	{:else if selectedStep === 'tweaks'}
+		<TweaksStep onBack={back} onContinue={next} />
+	{:else if selectedStep === 'tetra'}
+		<TetraStep onBack={back} onContinue={next} />
+	{:else if selectedStep === 'fyra-dash'}
+		<FyraStep onBack={back} onContinue={next} />
+	{:else}
+		<CompleteStep onBack={back} onContinue={next} />
+	{/if}
+</Shell>
