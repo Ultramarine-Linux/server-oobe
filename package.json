@@ -9,8 +9,8 @@
 		"build": "vite build",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"lint": "prettier --check .",
-		"test:accessibility": "playwright test",
-		"test:accessibility:ci": "playwright install --with-deps chrome && playwright test",
+		"test:accessibility": "svelte-kit sync && playwright test",
+		"test:accessibility:ci": "svelte-kit sync && playwright install --with-deps chrome && playwright test",
 		"format": "prettier --write ."
 	},
 	"devDependencies": {
