@@ -9,7 +9,6 @@
 
 <StepLayout
 	title="Connect to Fyra"
-	description="Fyra connects this server to the global Dashboard. This is optional for offline setup and uses a short-lived authorization request."
 	{onBack}
 	{onContinue}
 	continueLabel={status === 'authorized' ? 'Review setup' : 'Continue offline'}

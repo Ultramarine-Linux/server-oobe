@@ -1,14 +1,13 @@
 <script lang="ts">
 	import StepLayout from '$lib/components/StepLayout.svelte';
+	import { t } from '$lib/i18n.svelte';
 	let fullName = $state('');
 	let username = $state('');
 	let usernameEdited = $state(false);
 	let touched = $state(false);
 	let { onBack, onContinue }: { onBack: () => void; onContinue: () => void } = $props();
 	let usernameError = $derived(
-		touched && !/^[a-z_][a-z0-9_-]*$/.test(username)
-			? 'Use a lowercase username beginning with a letter or underscore.'
-			: ''
+		touched && !/^[a-z_][a-z0-9_-]*$/.test(username) ? t('username-error') : ''
 	);
 	function updateName(value: string) {
 		fullName = value;
@@ -23,14 +22,13 @@
 </script>
 
 <StepLayout
-	title="Create your administrator"
-	description="This local administrator is used for recovery and host management. The backend will perform the privileged user operation."
+	title={t('administrator-title')}
 	{onBack}
 	{onContinue}
 	canContinue={Boolean(username) && !usernameError}
 >
 	<label class="field-label" for="full-name"
-		>Full name<input
+		>{t('full-name-label')}<input
 			class="text-input"
 			id="full-name"
 			value={fullName}
@@ -38,7 +36,7 @@
 		/></label
 	>
 	<label class="field-label" for="username"
-		>Username<input
+		>{t('username-label')}<input
 			class="text-input"
 			id="username"
 			bind:value={username}

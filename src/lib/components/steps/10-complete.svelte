@@ -3,13 +3,7 @@
 	let { onBack, onContinue }: { onBack: () => void; onContinue: () => void } = $props();
 </script>
 
-<StepLayout
-	title="Setup complete"
-	description="Your local setup choices are ready. Local recovery remains available, and global Dashboard status is shown only when the backend confirms pairing."
-	{onBack}
-	{onContinue}
-	continueLabel="Finish"
->
+<StepLayout title="Setup complete" {onBack} {onContinue} continueLabel="Finish">
 	<div class="summary-grid">
 		<div><span>Hostname</span><strong>ultramarine-server</strong></div>
 		<div><span>Administrator</span><strong>Ready to configure</strong></div>

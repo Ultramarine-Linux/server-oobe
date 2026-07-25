@@ -1,46 +1,43 @@
 <script lang="ts">
 	import StepLayout from '$lib/components/StepLayout.svelte';
-	const languages = [
-		['en-US', 'English', 'English'],
-		['es-ES', 'Spanish', 'Español'],
-		['de-DE', 'German', 'Deutsch'],
-		['fr-FR', 'French', 'Français'],
-		['ja-JP', 'Japanese', '日本語']
-	];
+	import { setLocale, t } from '$lib/i18n.svelte';
+	import { supportedLanguages } from '$lib/languages';
+
 	let search = $state('');
 	let selected = $state('en-US');
 	let { onBack, onContinue }: { onBack: () => void; onContinue: () => void } = $props();
 	let filtered = $derived(
-		languages.filter(([locale, name, native]) =>
-			`${locale} ${name} ${native}`.toLowerCase().includes(search.toLowerCase())
+		supportedLanguages.filter(({ locale, name, nativeName }) =>
+			`${locale} ${name} ${nativeName}`.toLowerCase().includes(search.toLowerCase())
 		)
 	);
 </script>
 
-<StepLayout
-	title="Choose your language"
-	description="Search for a display language. The selected locale will be applied by the local setup service."
-	{onBack}
-	{onContinue}
->
-	<label class="field-label" for="language-search">Search languages</label>
+<StepLayout title={t('language-title')} {onBack} {onContinue}>
+	<label class="field-label" for="language-search">{t('language-search-label')}</label>
 	<input
 		class="text-input"
 		id="language-search"
 		bind:value={search}
-		placeholder="Search by language or locale"
+		placeholder={t('language-search-placeholder')}
 	/>
-	<div class="option-list" role="radiogroup" aria-label="Languages">
-		{#each filtered as [locale, name, native]}
+	<div class="option-list" role="radiogroup" aria-label={t('language-group-label')}>
+		{#each filtered as language}
 			<button
-				class:selected={selected === locale}
+				class:selected={selected === language.locale}
 				class="option"
 				type="button"
 				role="radio"
-				aria-checked={selected === locale}
-				onclick={() => (selected = locale)}
-				><strong>{name}</strong><span>{native} · {locale}</span></button
+				aria-checked={selected === language.locale}
+				onclick={() => {
+					selected = language.locale;
+					setLocale(language.locale);
+				}}
 			>
-		{:else}<p class="empty-message">No languages match your search.</p>{/each}
+				<strong>{language.name}</strong><span>{language.nativeName} · {language.locale}</span>
+			</button>
+		{:else}
+			<p class="empty-message">{t('language-empty')}</p>
+		{/each}
 	</div>
 </StepLayout>

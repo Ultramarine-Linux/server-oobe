@@ -1,21 +1,15 @@
 <script lang="ts">
 	import StepLayout from '$lib/components/StepLayout.svelte';
+	import { t } from '$lib/i18n.svelte';
 	let { onBack, onContinue }: { onBack: () => void; onContinue: () => void } = $props();
 </script>
 
-<StepLayout
-	title="Welcome to Ultramarine Server"
-	description="Set up this server locally. You can resume setup after a reboot, and local recovery remains available when the global Dashboard is offline."
-	{onBack}
-	{onContinue}
->
+<StepLayout title={t('welcome-title')} {onBack} {onContinue}>
 	<div class="panel success-panel">
 		<div class="status-icon">✓</div>
 		<div>
-			<h3>Ready for first run</h3>
-			<p>
-				We will configure the host, create an administrator, and prepare the local management agent.
-			</p>
+			<h3>{t('welcome-ready-title')}</h3>
+			<p>{t('welcome-ready-description')}</p>
 		</div>
 	</div>
 </StepLayout>

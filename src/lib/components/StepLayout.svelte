@@ -1,18 +1,15 @@
 <script lang="ts">
+	import { t } from '$lib/i18n.svelte';
 	import StepActions from './StepActions.svelte';
 	let {
-		eyebrow = 'Step in progress',
 		title,
-		description,
 		children,
 		onBack,
 		onContinue,
 		canContinue = true,
 		continueLabel = 'Continue'
 	}: {
-		eyebrow?: string;
 		title: string;
-		description: string;
 		children: import('svelte').Snippet;
 		onBack: () => void;
 		onContinue: () => void;
@@ -22,14 +19,8 @@
 </script>
 
 <div class="workspace-heading">
-	<div>
-		<p class="eyebrow">{eyebrow}</p>
-		<h2>{title}</h2>
-	</div>
-	<span class="status-pill">Fixture mode</span>
+	<h2>{title}</h2>
+	<span class="status-pill">{t('fixture-mode')}</span>
 </div>
-<div class="step-content">
-	<p class="step-description">{description}</p>
-	{@render children()}
-</div>
+<div class="step-content">{@render children()}</div>
 <StepActions {onBack} {onContinue} {canContinue} {continueLabel} />

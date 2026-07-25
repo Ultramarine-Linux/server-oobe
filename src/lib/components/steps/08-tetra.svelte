@@ -9,12 +9,7 @@
 	}
 </script>
 
-<StepLayout
-	title="Connect Tetra"
-	description="Tetra runs separately from this web UI. The libtaidan-backed local service installs and configures it; Tetra owns host identity, typed host operations, and the outbound Dashboard connection."
-	{onBack}
-	{onContinue}
->
+<StepLayout title="Connect Tetra" {onBack} {onContinue}>
 	<div class="panel">
 		<div class="status-icon">
 			{status === 'running' ? '✓' : status === 'installing' ? '…' : '!'}

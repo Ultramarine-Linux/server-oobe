@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '$lib/i18n.svelte';
 	import type { OobeStep, StepId } from '$lib/oobe-state';
 
 	let {
@@ -10,8 +11,8 @@
 
 <nav class="steps-card" aria-label="Setup steps">
 	<div class="card-heading">
-		<p class="eyebrow">First run</p>
-		<h2>Get your server ready</h2>
+		<p class="eyebrow">{t('first-run')}</p>
+		<h2>{t('get-server-ready')}</h2>
 	</div>
 	<div class="step-list">
 		{#each steps as step, index}

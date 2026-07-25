@@ -57,13 +57,13 @@ export const fixtureSteps: OobeStep[] = [
 	{
 		id: 'language',
 		label: 'Language',
-		status: 'pending',
+		status: 'active',
 		description: 'Select your preferred language.'
 	},
 	{
 		id: 'welcome',
 		label: 'Welcome',
-		status: 'active',
+		status: 'pending',
 		description: 'Welcome to Ultramarine Server.'
 	},
 	{
@@ -115,7 +115,7 @@ export const fixtureSteps: OobeStep[] = [
 export const fixtureState: OobeState = {
 	version: 1,
 	completed: false,
-	activeStep: 'welcome',
+	activeStep: 'language',
 	steps: fixtureSteps,
 	hostname: 'ultramarine-server',
 	tetra: { installed: false, running: false, paired: false },

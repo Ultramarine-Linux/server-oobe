@@ -6,12 +6,7 @@
 	let { onBack, onContinue }: { onBack: () => void; onContinue: () => void } = $props();
 </script>
 
-<StepLayout
-	title="Choose server defaults"
-	description="Recommended defaults are safe and optional. They can be changed later through the local recovery UI."
-	{onBack}
-	{onContinue}
->
+<StepLayout title="Choose server defaults" {onBack} {onContinue}>
 	<div class="option-list">
 		<label class="toggle-option"
 			><span

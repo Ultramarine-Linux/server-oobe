@@ -1,5 +1,6 @@
 <script lang="ts">
 	import StepLayout from '$lib/components/StepLayout.svelte';
+	import { t } from '$lib/i18n.svelte';
 	let deviceName = $state('Ultramarine Server');
 	let hostname = $state('ultramarine-server');
 	let touched = $state(false);
@@ -7,30 +8,23 @@
 	let hostnameError = $derived(
 		touched &&
 			!/^(([a-z0-9]|[a-z0-9][a-z0-9-]*[a-z0-9])\.)*[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(hostname)
-			? 'Use lowercase letters, numbers, dots, and hyphens without empty labels.'
+			? t('hostname-error')
 			: ''
 	);
 	function derive(value: string) {
-		if (!touched) {
-			const candidate = value
-				.trim()
-				.split(/\s+/)[0]
-				?.toLowerCase()
-				.replace(/[^a-z0-9-]/g, '');
-			if (candidate) hostname = candidate;
-		}
+		if (touched) return;
+
+		hostname = value
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, '-')
+			.replace(/^-+|-+$/g, '');
 	}
 </script>
 
-<StepLayout
-	title="Name your server"
-	description="Choose a friendly device name and a valid hostname for local network access."
-	{onBack}
-	{onContinue}
-	canContinue={!hostnameError}
->
+<StepLayout title={t('device-name-title')} {onBack} {onContinue} canContinue={!hostnameError}>
 	<label class="field-label" for="device-name"
-		>Device name<input
+		>{t('device-name-label')}<input
 			class="text-input"
 			id="device-name"
 			bind:value={deviceName}
@@ -38,7 +32,7 @@
 		/></label
 	>
 	<label class="field-label" for="hostname"
-		>Hostname<input
+		>{t('hostname-label')}<input
 			class="text-input"
 			id="hostname"
 			bind:value={hostname}

@@ -1,20 +1,18 @@
 <script lang="ts">
 	import StepLayout from '$lib/components/StepLayout.svelte';
+	import { t } from '$lib/i18n.svelte';
 	let status = $state<'unknown' | 'online' | 'offline'>('unknown');
+	let checking = $state(false);
 	let { onBack, onContinue }: { onBack: () => void; onContinue: () => void } = $props();
 	async function check() {
-		status = 'unknown';
+		checking = true;
 		await new Promise((resolve) => setTimeout(resolve, 350));
-		status = 'offline';
+		status = navigator.onLine ? 'online' : 'offline';
+		checking = false;
 	}
 </script>
 
-<StepLayout
-	title="Check your internet connection"
-	description="Basic local setup works offline. An Internet connection is needed only when you connect this server to Fyra."
-	{onBack}
-	{onContinue}
->
+<StepLayout title="Check your internet connection" {onBack} {onContinue}>
 	<div class="panel" class:success-panel={status === 'online'}>
 		<div class="status-icon">{status === 'online' ? '✓' : status === 'offline' ? '!' : '…'}</div>
 		<div>
@@ -33,8 +31,8 @@
 		</div>
 	</div>
 	<div class="inline-actions">
-		<button class="secondary-button" type="button" onclick={check} disabled={status === 'unknown'}
-			>Check connection</button
+		<button class="secondary-button" type="button" onclick={check} disabled={checking}
+			>{checking ? 'Checking…' : 'Check connection'}</button
 		>{#if status === 'offline'}<button class="secondary-button" type="button"
 				>Open network settings</button
 			>{/if}

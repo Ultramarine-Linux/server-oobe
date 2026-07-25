@@ -132,7 +132,7 @@ button {
 }
 
 button:disabled {
-	cursor: wait;
+	cursor: not-allowed;
 	opacity: 0.65;
 }
 
@@ -265,6 +265,14 @@ h3 {
 	background: var(--card);
 }
 
+.steps-column {
+	min-width: 0;
+}
+
+.workspace {
+	box-sizing: border-box;
+}
+
 .steps-card {
 	padding: 1.25rem;
 }
@@ -332,17 +340,23 @@ h3 {
 }
 
 .workspace {
+	display: flex;
+	min-height: 0;
+	flex-direction: column;
+	overflow: hidden;
 	padding: 1.5rem;
 }
 
 .workspace-heading {
 	display: flex;
 	align-items: start;
+	justify-content: space-between;
 	margin-bottom: 1rem;
 }
 
 .workspace-heading .status-pill {
 	margin-top: 0.15rem;
+	margin-left: 1rem;
 }
 
 .panel {
@@ -416,16 +430,15 @@ h3 {
 	display: flex;
 	justify-content: flex-end;
 	gap: 0.6rem;
+	margin-top: auto;
 }
 
 .step-content {
 	margin-bottom: 1.25rem;
 }
 
-.step-description {
-	color: var(--muted-foreground);
-	font-size: 0.85rem;
-	line-height: 1.5;
+.step-content > :first-child {
+	margin-top: 0;
 }
 
 .field-label {
@@ -453,8 +466,23 @@ h3 {
 
 .option-list {
 	display: grid;
+	align-content: start;
 	gap: 0.5rem;
 	margin: 1rem 0;
+}
+
+.step-content:has(> .option-list),
+.step-content:has(.split-fields) {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	flex-direction: column;
+}
+
+.step-content > .option-list {
+	min-height: 0;
+	flex: 1;
+	overflow-y: auto;
 }
 
 .option {
@@ -485,12 +513,20 @@ h3 {
 
 .split-fields {
 	display: grid;
+	min-height: 0;
 	grid-template-columns: 1fr 1fr;
 	gap: 1rem;
 }
 
+.split-fields > div {
+	display: flex;
+	min-height: 0;
+	flex-direction: column;
+}
+
 .compact {
-	max-height: 15rem;
+	min-height: 0;
+	flex: 1;
 	overflow-y: auto;
 }
 

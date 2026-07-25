@@ -1,5 +1,6 @@
 <script lang="ts">
 	import StepLayout from '$lib/components/StepLayout.svelte';
+	import { t } from '$lib/i18n.svelte';
 	let password = $state('');
 	let confirmation = $state('');
 	let touched = $state(false);
@@ -22,14 +23,13 @@
 </script>
 
 <StepLayout
-	title="Set a password"
-	description="Use a strong password for the local administrator. It is sent once through the authenticated local operation and is never saved in OOBE state."
+	title={t('password-title')}
 	{onBack}
 	onContinue={submit}
 	canContinue={password.length > 0 && confirmation.length > 0 && !error}
 >
 	<label class="field-label" for="password"
-		>Password<input
+		>{t('password-label')}<input
 			class="text-input"
 			id="password"
 			type="password"
@@ -38,7 +38,7 @@
 		/></label
 	>
 	<label class="field-label" for="password-confirm"
-		>Confirm password<input
+		>{t('password-confirm-label')}<input
 			class="text-input"
 			id="password-confirm"
 			type="password"
