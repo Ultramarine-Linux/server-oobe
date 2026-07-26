@@ -2,10 +2,9 @@
 	import StepLayout from '$lib/components/StepLayout.svelte';
 	import { t } from '$lib/i18n.svelte';
 	let fullName = $state('');
-	let username = $state('');
 	let usernameEdited = $state(false);
 	let touched = $state(false);
-	let { onBack, onContinue }: { onBack: () => void; onContinue: () => void } = $props();
+	let { username = $bindable(''), onBack, onContinue } = $props();
 	let usernameError = $derived(
 		touched && !/^[a-z_][a-z0-9_-]*$/.test(username) ? t('username-error') : ''
 	);

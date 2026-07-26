@@ -2,9 +2,8 @@
 	import StepLayout from '$lib/components/StepLayout.svelte';
 	import { t } from '$lib/i18n.svelte';
 	let deviceName = $state('Ultramarine Server');
-	let hostname = $state('ultramarine-server');
 	let touched = $state(false);
-	let { onBack, onContinue }: { onBack: () => void; onContinue: () => void } = $props();
+	let { hostname = $bindable('ultramarine-server'), onBack, onContinue } = $props();
 	let hostnameError = $derived(
 		touched &&
 			!/^(([a-z0-9]|[a-z0-9][a-z0-9-]*[a-z0-9])\.)*[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(hostname)

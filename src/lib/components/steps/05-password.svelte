@@ -1,10 +1,9 @@
 <script lang="ts">
 	import StepLayout from '$lib/components/StepLayout.svelte';
 	import { t } from '$lib/i18n.svelte';
-	let password = $state('');
 	let confirmation = $state('');
 	let touched = $state(false);
-	let { onBack, onContinue }: { onBack: () => void; onContinue: () => void } = $props();
+	let { password = $bindable(''), onBack, onContinue } = $props();
 	let error = $derived(
 		touched && password !== confirmation
 			? 'Passwords do not match.'
@@ -15,8 +14,6 @@
 	function submit() {
 		touched = true;
 		if (!error && password) {
-			password = '';
-			confirmation = '';
 			onContinue();
 		}
 	}
