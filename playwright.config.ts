@@ -28,7 +28,7 @@ export default defineConfig({
 	],
 	webServer: {
 		command:
-			'OOBE_FIXTURE_MODE=true VITE_FIXTURE_API=true pnpm build && pnpm exec vite preview --host 127.0.0.1 --port 4173',
+			'OOBE_FIXTURE_MODE=true VITE_FIXTURE_API=true pnpm exec vite dev --host 127.0.0.1 --port 4173',
 		reuseExistingServer: !isCI,
 		timeout: 120_000,
 		url: 'http://127.0.0.1:4173/'

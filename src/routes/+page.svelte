@@ -72,6 +72,7 @@
 			oobeState = (await res.json()) as OobeState;
 		} catch (err) {
 			console.error('Failed to save active step:', err);
+			oobeState = { ...oobeState, activeStep: step };
 		}
 	}
 
@@ -86,6 +87,7 @@
 			oobeState = (await res.json()) as OobeState;
 		} catch (err) {
 			console.error('Failed to save hosting choice:', err);
+			oobeState = { ...oobeState, hostingChoice: choice };
 		}
 	}
 
@@ -114,6 +116,8 @@
 			oobeState = (await res.json()) as OobeState;
 		} catch (err) {
 			console.error('Failed to patch step status:', err);
+			const updatedSteps = oobeState.steps.map((s) => (s.id === step ? { ...s, status } : s));
+			oobeState = { ...oobeState, steps: updatedSteps };
 		}
 	}
 
@@ -128,6 +132,7 @@
 			oobeState = (await res.json()) as OobeState;
 		} catch (err) {
 			console.error('Failed to mark completed:', err);
+			oobeState = { ...oobeState, completed: true };
 		}
 	}
 
