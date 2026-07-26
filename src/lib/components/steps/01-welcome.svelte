@@ -4,7 +4,7 @@
 	let { onBack, onContinue }: { onBack: () => void; onContinue: () => void } = $props();
 </script>
 
-<StepLayout title={t('welcome-title')} {onBack} {onContinue}>
+<StepLayout title={t('welcome-title')} {onBack} {onContinue} showBack={false}>
 	<div class="panel success-panel">
 		<div class="status-icon">✓</div>
 		<div>

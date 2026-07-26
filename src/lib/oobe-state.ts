@@ -1,7 +1,5 @@
 export type StepId =
-	| 'language'
 	| 'welcome'
-	| 'keyboard'
 	| 'devicename'
 	| 'whoareyou'
 	| 'password'
@@ -33,15 +31,31 @@ export type FyraState = {
 	serverName?: string;
 };
 
+export type DashboardState = {
+	installed: boolean;
+	installing: boolean;
+};
+
+export type CloudflareState = {
+	installed: boolean;
+	installing: boolean;
+};
+
+export type HostingChoice = 'global' | 'local' | 'both';
+
 export type OobeState = {
 	version: 1;
 	completed: boolean;
 	activeStep: StepId;
 	steps: OobeStep[];
-	hostname?: string;
-	administrator?: string;
+	hostname: string;
+	administrator: string;
+	keyboardLayout?: string;
+	hostingChoice?: HostingChoice | null;
 	tetra: TetraState;
 	fyra: FyraState;
+	dashboard: DashboardState;
+	cloudflare: CloudflareState;
 };
 
 export type OperationStatus = 'pending' | 'running' | 'succeeded' | 'failed';
@@ -55,22 +69,10 @@ export type OperationResult = {
 
 export const fixtureSteps: OobeStep[] = [
 	{
-		id: 'language',
-		label: 'Language',
-		status: 'active',
-		description: 'Select your preferred language.'
-	},
-	{
 		id: 'welcome',
 		label: 'Welcome',
-		status: 'pending',
+		status: 'active',
 		description: 'Welcome to Ultramarine Server.'
-	},
-	{
-		id: 'keyboard',
-		label: 'Keyboard',
-		status: 'pending',
-		description: 'Set your keyboard layout.'
 	},
 	{ id: 'devicename', label: 'Device name', status: 'pending', description: 'Name this server.' },
 	{
@@ -102,7 +104,7 @@ export const fixtureSteps: OobeStep[] = [
 		id: 'fyra-dash',
 		label: 'Fyra',
 		status: 'pending',
-		description: 'Connect this server to the global dashboard.'
+		description: 'Choose how this server will be hosted.'
 	},
 	{
 		id: 'complete',
@@ -115,11 +117,16 @@ export const fixtureSteps: OobeStep[] = [
 export const fixtureState: OobeState = {
 	version: 1,
 	completed: false,
-	activeStep: 'language',
+	activeStep: 'welcome',
 	steps: fixtureSteps,
-	hostname: 'ultramarine-server',
+	hostname: '',
+	administrator: '',
+	keyboardLayout: undefined,
+	hostingChoice: null,
 	tetra: { installed: false, running: false, paired: false },
-	fyra: { status: 'not-started' }
+	fyra: { status: 'not-started' },
+	dashboard: { installed: false, installing: false },
+	cloudflare: { installed: false, installing: false }
 };
 
 export function stepIndex(id: StepId): number {

@@ -33,3 +33,19 @@ export function t(id: string, args?: Record<string, string | number>): string {
 export function hasLocale(locale: string): boolean {
 	return catalogs.has(locale);
 }
+
+export function detectLocale(): void {
+	if (typeof navigator === 'undefined') return;
+	const candidates = [navigator.language, ...(navigator.languages || [])];
+	for (const candidate of candidates) {
+		if (catalogs.has(candidate)) {
+			localeState.value = candidate;
+			return;
+		}
+		const langCode = candidate.split('-')[0];
+		if (catalogs.has(langCode)) {
+			localeState.value = langCode;
+			return;
+		}
+	}
+}

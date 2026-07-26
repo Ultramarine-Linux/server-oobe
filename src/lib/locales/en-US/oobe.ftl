@@ -1,7 +1,6 @@
 # Ultramarine Server OOBE English source catalog
 brand-name = Ultramarine Server
-setup-title = Server setup
-local-setup = Local setup
+setup-title = Setup
 fixture-mode = Fixture mode
 switch-to-dark = Switch to dark mode
 switch-to-light = Switch to light mode

@@ -1,8 +1,6 @@
 <script lang="ts">
 	import Shell from '$lib/components/Shell.svelte';
-	import LanguageStep from '$lib/components/steps/00-language.svelte';
 	import WelcomeStep from '$lib/components/steps/01-welcome.svelte';
-	import KeyboardStep from '$lib/components/steps/02-keyboard.svelte';
 	import DeviceNameStep from '$lib/components/steps/03-device-name.svelte';
 	import UserStep from '$lib/components/steps/04-user.svelte';
 	import PasswordStep from '$lib/components/steps/05-password.svelte';
@@ -12,27 +10,53 @@
 	import FyraStep from '$lib/components/steps/09-fyra.svelte';
 	import CompleteStep from '$lib/components/steps/10-complete.svelte';
 	import { api } from '$lib/oobe-api';
-	import { fixtureState, stepIndex, type StepId, type OobeState } from '$lib/oobe-state';
+	import {
+		fixtureState,
+		fixtureSteps,
+		stepIndex,
+		type StepId,
+		type OobeState
+	} from '$lib/oobe-state';
+	import { onMount } from 'svelte';
+	import { detectLocale } from '$lib/i18n.svelte';
+	import { detectKeyboardLayout } from '$lib/keyboard-detect';
 
 	let oobeState = $state<OobeState>(fixtureState);
 	let loaded = $state(false);
 	let errorMessage = $state('');
 	let operationLoading = $state(false);
 	let password = $state('');
+	let redirecting = $state(false);
 
 	let selectedStep = $derived(oobeState.activeStep);
 	let currentIndex = $derived(stepIndex(selectedStep));
 
-	$effect(() => {
-		api
-			.getState()
+	function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+		return new Promise((resolve, reject) => {
+			const timer = setTimeout(() => reject(new Error('Timed out loading state')), ms);
+			promise
+				.then((v) => {
+					clearTimeout(timer);
+					resolve(v);
+				})
+				.catch((err) => {
+					clearTimeout(timer);
+					reject(err);
+				});
+		});
+	}
+
+	onMount(() => {
+		detectLocale();
+		oobeState.keyboardLayout = detectKeyboardLayout();
+		withTimeout(api.getState(), 5000)
 			.then((s) => {
 				oobeState = s;
 				loaded = true;
 			})
 			.catch((err) => {
 				console.error('Failed to load OOBE state:', err);
-				errorMessage = String(err);
+				errorMessage = 'Unable to load setup state. Using defaults.';
 				loaded = true;
 			});
 	});
@@ -51,25 +75,31 @@
 		}
 	}
 
-	async function callOperation(operation: string, payload?: Record<string, unknown>) {
-		operationLoading = true;
+	async function saveHostingChoice(choice: 'global' | 'local' | 'both') {
 		try {
-			const res = await api.startOperation(selectedStep, operation, payload);
-			operationLoading = false;
-			return res;
+			const res = await fetch('/api/oobe/state', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ hostingChoice: choice })
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			oobeState = (await res.json()) as OobeState;
 		} catch (err) {
-			operationLoading = false;
-			throw err;
+			console.error('Failed to save hosting choice:', err);
 		}
 	}
 
-	function selectStep(step: StepId) {
-		saveActiveStep(step);
+	async function callOperation(operation: string, payload?: Record<string, unknown>) {
+		const res = await api.startOperation(selectedStep, operation, payload);
+		if (res.status === 'failed') {
+			throw new Error(res.message || 'Operation failed');
+		}
+		return res;
 	}
 
 	function onBack() {
 		if (currentIndex > 0) {
-			saveActiveStep(oobeState.steps[currentIndex - 1].id);
+			saveActiveStep(fixtureSteps[currentIndex - 1].id);
 		}
 	}
 
@@ -107,8 +137,35 @@
 
 		const step = selectedStep;
 
-		// Last step: just mark completed and stop.
-		if (currentIndex >= oobeState.steps.length - 1) {
+		// Last step: finish or hand off to local dashboard.
+		if (currentIndex >= fixtureSteps.length - 1) {
+			const choice = oobeState.hostingChoice;
+			const wantsLocal = choice === 'local' || choice === 'both';
+			const wantsGlobal = choice === 'global' || choice === 'both';
+
+			if (wantsLocal || wantsGlobal) {
+				operationLoading = true;
+				try {
+					await markCompleted();
+					if (wantsGlobal) {
+						await callOperation('cloudflare.install');
+						await callOperation('fyra.begin');
+					}
+					if (wantsLocal) {
+						await callOperation('dashboard.install');
+						await callOperation('dashboard.handoff');
+						redirecting = true;
+						await new Promise((resolve) => setTimeout(resolve, 4000));
+						window.location.href = '/';
+					}
+				} catch (err) {
+					errorMessage = String(err);
+					redirecting = false;
+				} finally {
+					operationLoading = false;
+				}
+				return;
+			}
 			await markCompleted();
 			return;
 		}
@@ -119,9 +176,13 @@
 				if (oobeState.hostname) {
 					await callOperation('hostname.apply', { hostname: oobeState.hostname });
 				}
-			}
-			if (step === 'keyboard') {
-				await callOperation('keyboard.apply', { layout: 'us' });
+				if (oobeState.keyboardLayout) {
+					try {
+						await callOperation('keyboard.apply', { layout: oobeState.keyboardLayout });
+					} catch (err) {
+						console.error('Failed to apply keyboard layout:', err);
+					}
+				}
 			}
 			if (step === 'whoareyou') {
 				if (oobeState.administrator) {
@@ -144,13 +205,14 @@
 				await callOperation('tetra.start');
 			}
 			if (step === 'fyra-dash') {
-				await callOperation('fyra.begin');
-				await markCompleted();
+				if (oobeState.hostingChoice) {
+					await saveHostingChoice(oobeState.hostingChoice);
+				}
 			}
 
 			await api.completeStep(step);
-			const nextStep = oobeState.steps[currentIndex + 1].id;
-			await saveActiveStep(nextStep);
+			const nextStep = fixtureSteps[currentIndex + 1]?.id;
+			if (nextStep) await saveActiveStep(nextStep);
 		} catch (err) {
 			errorMessage = String(err);
 			await patchStepStatus(step, 'failed');
@@ -162,7 +224,7 @@
 	async function onReboot() {
 		operationLoading = true;
 		try {
-			await api.startOperation('complete', 'system.reboot');
+			await callOperation('system.reboot');
 		} catch (err) {
 			errorMessage = String(err);
 		} finally {
@@ -173,7 +235,7 @@
 	async function onShutdown() {
 		operationLoading = true;
 		try {
-			await api.startOperation('complete', 'system.poweroff');
+			await callOperation('system.poweroff');
 		} catch (err) {
 			errorMessage = String(err);
 		} finally {
@@ -192,45 +254,49 @@
 		<p>Loading setup state…</p>
 	</div>
 {:else}
-	{#if errorMessage}
-		<div class="global-error" role="alert">
-			<p>{errorMessage}</p>
-			<button type="button" onclick={() => (errorMessage = '')}>Dismiss</button>
+	{#if redirecting}
+		<div class="redirect-overlay">
+			<p class="redirect-title">Starting dashboard…</p>
+			<p class="redirect-sub">You will be redirected automatically.</p>
 		</div>
-	{/if}
-
-	<Shell steps={oobeState.steps} {selectedStep} onSelect={selectStep}>
-		{#if selectedStep === 'welcome'}
-			<WelcomeStep {onBack} {onContinue} />
-		{:else if selectedStep === 'language'}
-			<LanguageStep {onBack} {onContinue} />
-		{:else if selectedStep === 'keyboard'}
-			<KeyboardStep {onBack} {onContinue} />
-		{:else if selectedStep === 'devicename'}
-			<DeviceNameStep bind:hostname={oobeState.hostname} {onBack} {onContinue} />
-		{:else if selectedStep === 'whoareyou'}
-			<UserStep bind:username={oobeState.administrator} {onBack} {onContinue} />
-		{:else if selectedStep === 'password'}
-			<PasswordStep bind:password {onBack} {onContinue} />
-		{:else if selectedStep === 'internet'}
-			<InternetStep {onBack} {onContinue} />
-		{:else if selectedStep === 'tweaks'}
-			<TweaksStep {onBack} {onContinue} />
-		{:else if selectedStep === 'tetra'}
-			<TetraStep {onBack} {onContinue} />
-		{:else if selectedStep === 'fyra-dash'}
-			<FyraStep {onBack} {onContinue} />
-		{:else}
-			<CompleteStep
-				{onBack}
-				{onContinue}
-				{onReboot}
-				{onShutdown}
-				hostname={oobeState.hostname}
-				administrator={oobeState.administrator}
-			/>
+	{:else}
+		{#if errorMessage}
+			<div class="global-error" role="alert">
+				<p>{errorMessage}</p>
+				<button type="button" onclick={() => (errorMessage = '')}>Dismiss</button>
+			</div>
 		{/if}
-	</Shell>
+
+		<Shell>
+			{#if selectedStep === 'welcome'}
+				<WelcomeStep {onBack} {onContinue} />
+			{:else if selectedStep === 'devicename'}
+				<DeviceNameStep bind:hostname={oobeState.hostname} {onBack} {onContinue} />
+			{:else if selectedStep === 'whoareyou'}
+				<UserStep bind:username={oobeState.administrator} {onBack} {onContinue} />
+			{:else if selectedStep === 'password'}
+				<PasswordStep bind:password {onBack} {onContinue} />
+			{:else if selectedStep === 'internet'}
+				<InternetStep {onBack} {onContinue} />
+			{:else if selectedStep === 'tweaks'}
+				<TweaksStep {onBack} {onContinue} />
+			{:else if selectedStep === 'tetra'}
+				<TetraStep {onBack} {onContinue} />
+			{:else if selectedStep === 'fyra-dash'}
+				<FyraStep bind:hostingChoice={oobeState.hostingChoice} {onBack} {onContinue} />
+			{:else}
+				<CompleteStep
+					{onBack}
+					{onContinue}
+					{onReboot}
+					{onShutdown}
+					hostname={oobeState.hostname}
+					administrator={oobeState.administrator}
+					hostingChoice={oobeState.hostingChoice}
+				/>
+			{/if}
+		</Shell>
+	{/if}
 {/if}
 
 <style>
@@ -261,5 +327,27 @@
 		padding: 0.25rem 0.5rem;
 		border-radius: 0.25rem;
 		cursor: pointer;
+	}
+	.redirect-overlay {
+		position: fixed;
+		inset: 0;
+		z-index: 200;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		background: var(--background);
+		color: var(--foreground);
+	}
+	.redirect-title {
+		font-size: 1.25rem;
+		font-weight: 600;
+		margin: 0;
+	}
+	.redirect-sub {
+		color: var(--muted-foreground);
+		font-size: 0.9rem;
+		margin: 0;
 	}
 </style>

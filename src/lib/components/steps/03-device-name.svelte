@@ -1,9 +1,9 @@
 <script lang="ts">
 	import StepLayout from '$lib/components/StepLayout.svelte';
 	import { t } from '$lib/i18n.svelte';
-	let deviceName = $state('Ultramarine Server');
+	let deviceName = $state('');
 	let touched = $state(false);
-	let { hostname = $bindable('ultramarine-server'), onBack, onContinue } = $props();
+	let { hostname = $bindable(''), onBack, onContinue } = $props();
 	let hostnameError = $derived(
 		touched &&
 			!/^(([a-z0-9]|[a-z0-9][a-z0-9-]*[a-z0-9])\.)*[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(hostname)
@@ -21,7 +21,12 @@
 	}
 </script>
 
-<StepLayout title={t('device-name-title')} {onBack} {onContinue} canContinue={!hostnameError}>
+<StepLayout
+	title={t('device-name-title')}
+	{onBack}
+	{onContinue}
+	canContinue={Boolean(hostname) && !hostnameError}
+>
 	<label class="field-label" for="device-name"
 		>{t('device-name-label')}<input
 			class="text-input"

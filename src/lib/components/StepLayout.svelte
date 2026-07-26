@@ -7,7 +7,8 @@
 		onBack,
 		onContinue,
 		canContinue = true,
-		continueLabel = 'Continue'
+		continueLabel = 'Continue',
+		showBack = true
 	}: {
 		title: string;
 		children: import('svelte').Snippet;
@@ -15,6 +16,7 @@
 		onContinue: () => void;
 		canContinue?: boolean;
 		continueLabel?: string;
+		showBack?: boolean;
 	} = $props();
 </script>
 
@@ -23,4 +25,4 @@
 	<span class="status-pill">{t('fixture-mode')}</span>
 </div>
 <div class="step-content">{@render children()}</div>
-<StepActions {onBack} {onContinue} {canContinue} {continueLabel} />
+<StepActions {onBack} {onContinue} {canContinue} {continueLabel} {showBack} />

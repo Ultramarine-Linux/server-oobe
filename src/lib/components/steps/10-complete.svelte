@@ -1,12 +1,14 @@
 <script lang="ts">
 	import StepLayout from '$lib/components/StepLayout.svelte';
+	import type { HostingChoice } from '$lib/oobe-state';
 	let {
 		onBack,
 		onContinue,
 		onReboot,
 		onShutdown,
 		hostname = 'ultramarine-server',
-		administrator = 'Not configured'
+		administrator = 'Not configured',
+		hostingChoice
 	}: {
 		onBack: () => void;
 		onContinue: () => void;
@@ -14,15 +16,35 @@
 		onShutdown: () => void;
 		hostname?: string;
 		administrator?: string;
+		hostingChoice?: HostingChoice | null;
 	} = $props();
+
+	function hostingLabel(choice: HostingChoice | null | undefined): string {
+		switch (choice) {
+			case 'global':
+				return 'Remote via Fyra (Cloudflare tunnel)';
+			case 'local':
+				return 'Local dashboard (port 3972)';
+			case 'both':
+				return 'Local dashboard + Fyra';
+			default:
+				return 'Offline or not paired';
+		}
+	}
+
+	let continueLabel = $derived(
+		hostingChoice === 'local' || hostingChoice === 'both' ? 'Go to Dashboard' : 'Finish'
+	);
 </script>
 
-<StepLayout title="Setup complete" {onBack} {onContinue} continueLabel="Finish">
+<StepLayout title="Setup complete" {onBack} {onContinue} {continueLabel}>
 	<div class="summary-grid">
 		<div><span>Hostname</span><strong>{hostname}</strong></div>
 		<div><span>Administrator</span><strong>{administrator}</strong></div>
 		<div><span>Tetra</span><strong>Ready for local pairing</strong></div>
-		<div><span>Dashboard</span><strong>Offline or not paired</strong></div>
+		<div>
+			<span>Dashboard</span><strong>{hostingLabel(hostingChoice)}</strong>
+		</div>
 	</div>
 	<div class="panel">
 		<div class="status-icon">i</div>

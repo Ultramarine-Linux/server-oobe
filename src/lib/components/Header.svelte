@@ -12,7 +12,6 @@
 		<p class="eyebrow">{t('brand-name')}</p>
 		<h1>{t('setup-title')}</h1>
 	</div>
-	<span class="local-badge">{t('local-setup')}</span>
 	<button
 		class="theme-toggle"
 		type="button"
