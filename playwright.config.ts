@@ -10,7 +10,7 @@ export default defineConfig({
 	reporter: 'list',
 	projects: [
 		{
-			name: 'Chrome',
+			name: 'Chromium',
 			use: {
 				...devices['Desktop Chrome'],
 				channel: isCI ? 'chrome' : undefined,
