@@ -12,29 +12,32 @@
 	}
 </script>
 
-<StepLayout title="Check your internet connection" {onBack} {onContinue}>
+<StepLayout title={t('internet-title')} {onBack} {onContinue}>
 	<div class="panel" class:success-panel={status === 'online'}>
 		<div class="status-icon">{status === 'online' ? '✓' : status === 'offline' ? '!' : '…'}</div>
 		<div>
 			<h3>
 				{status === 'online'
-					? 'Network is ready'
+					? t('network-ready-title')
 					: status === 'offline'
-						? 'No Internet connection'
-						: 'Network status has not been checked'}
+						? t('network-offline-title')
+						: t('network-unchecked-title')}
 			</h3>
 			<p>
 				{status === 'offline'
-					? 'You can continue setup offline and retry later.'
-					: 'The local OOBE service will report interfaces and connectivity here.'}
+					? t('network-offline-description')
+					: t('network-unchecked-description')}
 			</p>
 		</div>
 	</div>
 	<div class="inline-actions">
-		<button class="secondary-button" type="button" onclick={check} disabled={checking}
-			>{checking ? 'Checking…' : 'Check connection'}</button
-		>{#if status === 'offline'}<button class="secondary-button" type="button"
-				>Open network settings</button
-			>{/if}
+		<button class="secondary-button" type="button" onclick={check} disabled={checking}>
+			{checking ? t('checking-connection') : t('check-connection')}
+		</button>
+		{#if status === 'offline'}
+			<button class="secondary-button" type="button">
+				{t('open-network-settings')}
+			</button>
+		{/if}
 	</div>
 </StepLayout>

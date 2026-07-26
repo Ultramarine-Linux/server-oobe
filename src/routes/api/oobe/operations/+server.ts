@@ -51,6 +51,8 @@ function result(
 	return { id, step, status, retryable, message };
 }
 
+const FIXTURE_MODE = process.env.OOBE_FIXTURE_MODE === 'true';
+
 export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const body = (await request.json()) as OperationRequest;
@@ -58,6 +60,51 @@ export const POST: RequestHandler = async ({ request }) => {
 		const opId = `op-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 		const state = await loadState();
+
+		if (FIXTURE_MODE) {
+			// Fixture mode: accept any operation, update state where applicable, return success.
+			switch (operation) {
+				case 'hostname.apply':
+					state.hostname = payload.hostname as string;
+					await saveState(state);
+					return json(result(opId, step, 'succeeded', false));
+				case 'keyboard.apply':
+					return json(result(opId, step, 'succeeded', false));
+				case 'user.create':
+					state.administrator = payload.name as string;
+					await saveState(state);
+					return json(result(opId, step, 'succeeded', false));
+				case 'password.set':
+					return json(result(opId, step, 'succeeded', false));
+				case 'network.check':
+					return json(result(opId, step, 'succeeded', false, 'Network is available'));
+				case 'tetra.start':
+					state.tetra.installed = true;
+					state.tetra.running = true;
+					await saveState(state);
+					return json(result(opId, step, 'succeeded', false));
+				case 'tweaks.apply':
+					return json(result(opId, step, 'succeeded', false));
+				case 'dashboard.install':
+					state.dashboard.installed = true;
+					state.dashboard.installing = false;
+					await saveState(state);
+					return json(result(opId, step, 'succeeded', false, 'Dashboard service installed'));
+				case 'dashboard.handoff':
+					return json(result(opId, step, 'succeeded', false, 'Handoff scheduled'));
+				case 'cloudflare.install':
+					state.cloudflare.installed = true;
+					state.cloudflare.installing = false;
+					await saveState(state);
+					return json(result(opId, step, 'succeeded', false, 'Cloudflared installed'));
+				case 'fyra.begin':
+					state.fyra.status = 'pending';
+					await saveState(state);
+					return json(result(opId, step, 'succeeded', false, 'Fyra authorization started'));
+				default:
+					return json(result(opId, step, 'succeeded', false, `Fixture mode: ${operation}`));
+			}
+		}
 
 		switch (operation) {
 			case 'hostname.apply': {

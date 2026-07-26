@@ -4,21 +4,15 @@
 		canContinue = true,
 		onBack,
 		onContinue,
-		continueLabel = 'Continue',
+		continueKey = 'next',
 		showBack = true
 	}: {
 		canContinue?: boolean;
 		onBack: () => void;
 		onContinue: () => void;
-		continueLabel?: string;
+		continueKey?: string;
 		showBack?: boolean;
 	} = $props();
-	function translatedContinueLabel() {
-		if (continueLabel === 'Finish') return t('finish');
-		if (continueLabel === 'Review setup') return t('review-setup');
-		if (continueLabel === 'Continue offline') return t('continue-offline');
-		return t('next');
-	}
 </script>
 
 <div class="actions">
@@ -26,6 +20,6 @@
 		<button class="secondary-button" type="button" onclick={onBack}>{t('prev')}</button>
 	{/if}
 	<button class="primary-button" type="button" onclick={onContinue} disabled={!canContinue}
-		>{translatedContinueLabel()}</button
+		>{t(continueKey)}</button
 	>
 </div>

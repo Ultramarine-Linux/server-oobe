@@ -211,6 +211,10 @@
 			}
 
 			await api.completeStep(step);
+			// Update local step status so sidebar shows the checkmark immediately
+			oobeState.steps = oobeState.steps.map((s) =>
+				s.id === step ? { ...s, status: 'complete' as import('$lib/oobe-state').StepStatus } : s
+			);
 			const nextStep = fixtureSteps[currentIndex + 1]?.id;
 			if (nextStep) await saveActiveStep(nextStep);
 		} catch (err) {
@@ -267,7 +271,7 @@
 			</div>
 		{/if}
 
-		<Shell>
+		<Shell steps={oobeState.steps} {selectedStep} onSelectStep={saveActiveStep}>
 			{#if selectedStep === 'welcome'}
 				<WelcomeStep {onBack} {onContinue} />
 			{:else if selectedStep === 'devicename'}

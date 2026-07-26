@@ -8,6 +8,33 @@ switch-to-light = Switch to light mode
 first-run = First run
 get-server-ready = Get your server ready
 
+step-welcome-label = Welcome
+step-welcome-description = Welcome to Ultramarine Server
+
+step-device-name-label = Device name
+step-device-name-description = Name this server and set a hostname
+
+step-administrator-label = Create a User
+step-administrator-description = Create your local user
+
+step-password-label = Password
+step-password-description = Set the administrator password
+
+step-internet-label = Internet
+step-internet-description = Check network status
+
+step-tweaks-label = Server defaults
+step-tweaks-description = Choose optional server defaults
+
+step-tetra-label = Tetra
+step-tetra-description = Connect the host management agent
+
+step-fyra-label = Dashboard
+step-fyra-description = Choose how Dashboard will be hosted
+
+step-complete-label = Complete
+step-complete-description = Review setup and hand off to Dashboard
+
 language-title = Choose your language
 language-search-label = Search languages
 language-search-placeholder = Search by language or locale
@@ -17,8 +44,8 @@ language-english = English
 language-english-native = English
 
 welcome-title = Welcome to Ultramarine Server
-welcome-ready-title = Ready for first run
-welcome-ready-description = We will configure the host, create an administrator, and prepare the local management agent.
+welcome-ready-title = Ready for setup
+welcome-ready-description = Let's configure your host, create a user, and set up Dashbord.
 
 keyboard-title = Set your keyboard
 keyboard-search-label = Search layouts
@@ -62,6 +89,9 @@ network-unchecked-description = The local OOBE service will report interfaces an
 check-connection = Check connection
 checking-connection = Checking…
 open-network-settings = Open network settings
+network-status-online = Network is ready
+network-status-offline = No Internet connection
+network-status-unchecked = Network status has not been checked
 
 # Server defaults
 defaults-title = Choose server defaults
@@ -85,6 +115,18 @@ start-tetra = Start Tetra
 installing = Installing…
 tetra-ready = Local Tetra detected. No token or certificate needs to be copied into the browser.
 
+# Hosting choice
+hosting-title = Choose hosting
+hosting-lead = How do you want to access and manage this server?
+hosting-global-title = Global hosting (recommended)
+hosting-global-description = Manage this server through the Fyra global dashboard. Requires a Cloudflare tunnel for remote access.
+hosting-local-title = Local hosting
+hosting-local-description = Run the Ultramarine Dashboard on this server at port 3972. No outbound connection required.
+hosting-both-title = Both
+hosting-both-description = Host the dashboard locally and connect to Fyra for global management.
+hosting-fyra-prompt-title = Connect your Fyra account
+hosting-fyra-prompt-description = You will need to sign in with your Fyra credentials to authorize global management of this server. This link will be shown at the next step.
+
 # Fyra
 fyra-title = Connect to Fyra
 fyra-not-started = Global connection is optional
@@ -97,6 +139,7 @@ connect-fyra = Connect to Fyra
 use-fixture-authorization = Use fixture authorization
 continue-offline = Continue offline
 review-setup = Review setup
+go-to-dashboard = Go to Dashboard
 
 # Completion
 complete-title = Setup complete
@@ -108,5 +151,10 @@ complete-tetra = Tetra
 complete-tetra-value = Ready for local pairing
 complete-dashboard = Dashboard
 complete-dashboard-value = Offline or not paired
+complete-hosting-global = Remote via Fyra (Cloudflare tunnel)
+complete-hosting-local = Local dashboard (port 3972)
+complete-hosting-both = Local dashboard + Fyra
 local-recovery-title = Local recovery stays available
 local-recovery-description = Keep this local setup path available for recovery even when the global Dashboard cannot be reached.
+reboot = Reboot
+shutdown = Shut down

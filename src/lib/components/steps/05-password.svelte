@@ -6,9 +6,9 @@
 	let { password = $bindable(''), onBack, onContinue } = $props();
 	let error = $derived(
 		touched && password !== confirmation
-			? 'Passwords do not match.'
+			? t('password-mismatch')
 			: touched && password.length < 8
-				? 'Use at least 8 characters.'
+				? t('password-too-short')
 				: ''
 	);
 	function submit() {

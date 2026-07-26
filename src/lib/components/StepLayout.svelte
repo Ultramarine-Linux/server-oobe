@@ -7,7 +7,7 @@
 		onBack,
 		onContinue,
 		canContinue = true,
-		continueLabel = 'Continue',
+		continueKey = 'next',
 		showBack = true
 	}: {
 		title: string;
@@ -15,14 +15,16 @@
 		onBack: () => void;
 		onContinue: () => void;
 		canContinue?: boolean;
-		continueLabel?: string;
+		continueKey?: string;
 		showBack?: boolean;
 	} = $props();
 </script>
 
 <div class="workspace-heading">
 	<h2>{title}</h2>
-	<span class="status-pill">{t('fixture-mode')}</span>
+	{#if import.meta.env.VITE_FIXTURE_API === 'true'}
+		<span class="status-pill">{t('fixture-mode')}</span>
+	{/if}
 </div>
 <div class="step-content">{@render children()}</div>
-<StepActions {onBack} {onContinue} {canContinue} {continueLabel} {showBack} />
+<StepActions {onBack} {onContinue} {canContinue} {continueKey} {showBack} />

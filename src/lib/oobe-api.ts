@@ -1,4 +1,4 @@
-import { type OobeState, type OperationResult, type StepId } from './oobe-state';
+import { fixtureState, type OobeState, type OperationResult, type StepId } from './oobe-state';
 
 export interface OobeApi {
 	getState(): Promise<OobeState>;
@@ -41,7 +41,6 @@ export const liveApi: OobeApi = {
 /** Fixture API for development without a backend. */
 export const fixtureApi: OobeApi = {
 	async getState() {
-		const { fixtureState } = await import('./oobe-state');
 		return structuredClone(fixtureState);
 	},
 	async completeStep(step) {

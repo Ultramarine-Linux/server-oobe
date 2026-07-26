@@ -1,5 +1,6 @@
 <script lang="ts">
 	import StepLayout from '$lib/components/StepLayout.svelte';
+	import { t } from '$lib/i18n.svelte';
 	import type { HostingChoice } from '$lib/oobe-state';
 	let {
 		onBack,
@@ -22,43 +23,40 @@
 	function hostingLabel(choice: HostingChoice | null | undefined): string {
 		switch (choice) {
 			case 'global':
-				return 'Remote via Fyra (Cloudflare tunnel)';
+				return t('complete-hosting-global');
 			case 'local':
-				return 'Local dashboard (port 3972)';
+				return t('complete-hosting-local');
 			case 'both':
-				return 'Local dashboard + Fyra';
+				return t('complete-hosting-both');
 			default:
-				return 'Offline or not paired';
+				return t('complete-dashboard-value');
 		}
 	}
 
-	let continueLabel = $derived(
-		hostingChoice === 'local' || hostingChoice === 'both' ? 'Go to Dashboard' : 'Finish'
+	let continueKey = $derived(
+		hostingChoice === 'local' || hostingChoice === 'both' ? 'go-to-dashboard' : 'finish'
 	);
 </script>
 
-<StepLayout title="Setup complete" {onBack} {onContinue} {continueLabel}>
+<StepLayout title={t('complete-title')} {onBack} {onContinue} {continueKey}>
 	<div class="summary-grid">
-		<div><span>Hostname</span><strong>{hostname}</strong></div>
-		<div><span>Administrator</span><strong>{administrator}</strong></div>
-		<div><span>Tetra</span><strong>Ready for local pairing</strong></div>
+		<div><span>{t('complete-hostname')}</span><strong>{hostname}</strong></div>
+		<div><span>{t('complete-administrator')}</span><strong>{administrator}</strong></div>
+		<div><span>{t('complete-tetra')}</span><strong>{t('complete-tetra-value')}</strong></div>
 		<div>
-			<span>Dashboard</span><strong>{hostingLabel(hostingChoice)}</strong>
+			<span>{t('complete-dashboard')}</span><strong>{hostingLabel(hostingChoice)}</strong>
 		</div>
 	</div>
 	<div class="panel">
 		<div class="status-icon">i</div>
 		<div>
-			<h3>Local recovery stays available</h3>
-			<p>
-				Keep this local setup path available for recovery even when the global Dashboard cannot be
-				reached.
-			</p>
+			<h3>{t('local-recovery-title')}</h3>
+			<p>{t('local-recovery-description')}</p>
 		</div>
 	</div>
 	<div class="complete-actions">
-		<button type="button" class="primary-button" onclick={onReboot}>Reboot</button>
-		<button type="button" class="secondary-button" onclick={onShutdown}>Shut down</button>
+		<button type="button" class="primary-button" onclick={onReboot}>{t('reboot')}</button>
+		<button type="button" class="secondary-button" onclick={onShutdown}>{t('shutdown')}</button>
 	</div>
 </StepLayout>
 

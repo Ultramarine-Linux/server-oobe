@@ -70,47 +70,57 @@ export type OperationResult = {
 export const fixtureSteps: OobeStep[] = [
 	{
 		id: 'welcome',
-		label: 'Welcome',
+		label: 'step-welcome-label',
 		status: 'active',
-		description: 'Welcome to Ultramarine Server.'
+		description: 'step-welcome-description'
 	},
-	{ id: 'devicename', label: 'Device name', status: 'pending', description: 'Name this server.' },
+	{
+		id: 'devicename',
+		label: 'step-device-name-label',
+		status: 'pending',
+		description: 'step-device-name-description'
+	},
 	{
 		id: 'whoareyou',
-		label: 'Create administrator',
+		label: 'step-administrator-label',
 		status: 'pending',
-		description: 'Create your local administrator.'
+		description: 'step-administrator-description'
 	},
 	{
 		id: 'password',
-		label: 'Password',
+		label: 'step-password-label',
 		status: 'pending',
-		description: 'Set the administrator password.'
+		description: 'step-password-description'
 	},
-	{ id: 'internet', label: 'Internet', status: 'pending', description: 'Check network readiness.' },
+	{
+		id: 'internet',
+		label: 'step-internet-label',
+		status: 'pending',
+		description: 'step-internet-description'
+	},
 	{
 		id: 'tweaks',
-		label: 'Server defaults',
+		label: 'step-tweaks-label',
 		status: 'pending',
-		description: 'Choose optional server defaults.'
+		description: 'step-tweaks-description'
 	},
 	{
 		id: 'tetra',
-		label: 'Tetra',
+		label: 'step-tetra-label',
 		status: 'pending',
-		description: 'Connect the host management agent.'
+		description: 'step-tetra-description'
 	},
 	{
 		id: 'fyra-dash',
-		label: 'Fyra',
+		label: 'step-fyra-label',
 		status: 'pending',
-		description: 'Choose how this server will be hosted.'
+		description: 'step-fyra-description'
 	},
 	{
 		id: 'complete',
-		label: 'Complete',
+		label: 'step-complete-label',
 		status: 'pending',
-		description: 'Review setup and hand off to recovery or Dashboard.'
+		description: 'step-complete-description'
 	}
 ];
 

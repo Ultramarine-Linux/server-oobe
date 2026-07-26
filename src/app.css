@@ -1,5 +1,5 @@
 @import 'tailwindcss';
-@import '@fontsource-variable/inter';
+@import '@fontsource-variable/atkinson-hyperlegible-next';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -27,7 +27,7 @@
 	--primary-foreground: var(--gray-50);
 	--border: var(--gray-200);
 	--ring: var(--gray-400);
-	font-family: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+	font-family: 'Atkinson Hyperlegible Next Variable', ui-sans-serif, system-ui, sans-serif;
 	font-synthesis: none;
 	text-rendering: optimizeLegibility;
 }
@@ -37,7 +37,6 @@
 	--gray-100: #e6e7e7;
 	--gray-200: #c8cbd8;
 	--gray-400: #b5b6b8;
-	--gray-600: #6b6c71;
 	--gray-700: #2d3146;
 	--gray-800: #202331;
 	--gray-900: #151720;
@@ -87,7 +86,7 @@
 	--color-muted-foreground: var(--muted-foreground);
 	--color-border: var(--border);
 	--color-ring: var(--ring);
-	--font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+	--font-sans: 'Atkinson Hyperlegible Next Variable', ui-sans-serif, system-ui, sans-serif;
 	--radius-sm: 0;
 	--radius-md: 0;
 	--radius-lg: 0;
@@ -145,7 +144,7 @@ button:disabled {
  * step routes can reuse the Dashboard-derived visual language. */
 .shell {
 	min-height: 100vh;
-	max-width: 1180px;
+	max-width: 1280px;
 	margin: 0 auto;
 	padding: 2rem;
 }
@@ -167,7 +166,8 @@ button:disabled {
 	display: flex;
 	flex-direction: column;
 	justify-content: center;
-	gap: 0.15rem;
+	gap: 0.05rem;
+	padding-top: 0.3rem;
 }
 
 .brand-copy .eyebrow,
@@ -176,7 +176,7 @@ button:disabled {
 }
 
 .eyebrow {
-	margin: 0 0 0.3rem;
+	margin: 0 0 0.1rem;
 	color: var(--muted-foreground);
 	font-size: 0.7rem;
 	letter-spacing: 0.08em;
@@ -205,7 +205,6 @@ h3 {
 	font-size: 0.95rem;
 }
 
-.local-badge,
 .status-pill {
 	margin-left: auto;
 	border: 1px solid var(--border);
@@ -253,9 +252,10 @@ h3 {
 }
 
 .content-grid {
-	display: block;
-	max-width: 860px;
-	margin: 0 auto;
+	display: grid;
+	grid-template-columns: 280px 1fr;
+	gap: 1.5rem;
+	max-width: 100%;
 }
 
 .workspace,
@@ -279,6 +279,7 @@ h3 {
 	border-bottom: 1px solid var(--border);
 }
 
+.card-heading,
 .workspace-heading {
 	display: flex;
 	align-items: start;
@@ -314,8 +315,8 @@ h3 {
 	place-items: center;
 	width: 2rem;
 	height: 2rem;
-	border: 1px solid currentColor;
-	color: var(--primary);
+	background: var(--primary);
+	color: var(--primary-foreground);
 }
 
 .panel-title {
@@ -518,7 +519,7 @@ h3 {
 	}
 
 	.content-grid {
-		padding: 0;
+		display: block;
 	}
 
 	.actions {

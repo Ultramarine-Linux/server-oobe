@@ -1,5 +1,6 @@
 <script lang="ts">
 	import StepLayout from '$lib/components/StepLayout.svelte';
+	import { t } from '$lib/i18n.svelte';
 	let status = $state<'not-installed' | 'installing' | 'stopped' | 'running'>('not-installed');
 	let { onBack, onContinue }: { onBack: () => void; onContinue: () => void } = $props();
 	async function install() {
@@ -9,7 +10,7 @@
 	}
 </script>
 
-<StepLayout title="Connect Tetra" {onBack} {onContinue}>
+<StepLayout title={t('tetra-title')} {onBack} {onContinue}>
 	<div class="panel">
 		<div class="status-icon">
 			{status === 'running' ? '✓' : status === 'installing' ? '…' : '!'}
@@ -17,17 +18,15 @@
 		<div>
 			<h3>
 				{status === 'not-installed'
-					? 'Tetra is not installed'
+					? t('tetra-not-installed')
 					: status === 'installing'
-						? 'Installing Tetra'
+						? t('tetra-installing')
 						: status === 'stopped'
-							? 'Tetra is installed but stopped'
-							: 'Tetra is running and unpaired'}
+							? t('tetra-stopped')
+							: t('tetra-running')}
 			</h3>
 			<p>
-				{status === 'running'
-					? 'Host fingerprint and pairing status will appear after the local agent reports them.'
-					: 'Start the local agent to prepare this server for Fyra pairing.'}
+				{status === 'running' ? t('tetra-running-description') : t('tetra-not-running-description')}
 			</p>
 		</div>
 	</div>
@@ -37,11 +36,11 @@
 			onclick={install}
 			disabled={status === 'installing'}
 			>{status === 'installing'
-				? 'Installing…'
+				? t('installing')
 				: status === 'stopped'
-					? 'Start Tetra'
-					: 'Install and start Tetra'}</button
+					? t('start-tetra')
+					: t('install-start-tetra')}</button
 		>{:else}<p class="status-note">
-			Local Tetra detected. No token or certificate needs to be copied into the browser.
+			{t('tetra-ready')}
 		</p>{/if}
 </StepLayout>
