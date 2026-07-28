@@ -19,7 +19,5 @@
 	{#if showBack}
 		<button class="secondary-button" type="button" onclick={onBack}>{t('prev')}</button>
 	{/if}
-	<button class="primary-button" type="button" onclick={onContinue} disabled={!canContinue}
-		>{t(continueKey)}</button
-	>
+	<button class="primary-button" type="submit" disabled={!canContinue}>{t(continueKey)}</button>
 </div>

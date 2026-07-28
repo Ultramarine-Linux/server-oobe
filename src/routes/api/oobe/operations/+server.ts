@@ -259,6 +259,32 @@ export const POST: RequestHandler = async ({ request }) => {
 				return json(result(opId, step, 'succeeded', false, 'Fyra authorization started'));
 			}
 
+			case 'oobe.cleanup': {
+				try {
+					await execFileAsync('systemctl', [
+						'disable',
+						'--now',
+						'ultramarine-server-oobe-kiosk.service'
+					]);
+				} catch {
+					// The kiosk service is optional and may already be stopped.
+				}
+				try {
+					await execFileAsync('dnf', ['remove', '-y', 'cage', 'chromium']);
+				} catch (e: any) {
+					return json(
+						result(
+							opId,
+							step,
+							'failed',
+							true,
+							e.stderr || e.message || 'Failed to remove kiosk packages'
+						)
+					);
+				}
+				return json(result(opId, step, 'succeeded', false, 'Local OOBE display cleaned up'));
+			}
+
 			case 'system.reboot': {
 				try {
 					await execFileAsync('systemctl', ['reboot']);

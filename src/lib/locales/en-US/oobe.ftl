@@ -46,6 +46,7 @@ language-english-native = English
 welcome-title = Welcome to Ultramarine Server
 welcome-ready-title = Ready for setup
 welcome-ready-description = Let's configure your host, create a user, and set up Dashbord.
+welcome-ip-addresses = Configure this server from another device at:
 
 keyboard-title = Set your keyboard
 keyboard-search-label = Search layouts
@@ -77,6 +78,7 @@ password-title = Set a password
 password-label = Password
 password-confirm-label = Confirm password
 password-mismatch = Passwords do not match.
+password-match = Passwords match.
 password-too-short = Use at least 8 characters.
 
 # Internet

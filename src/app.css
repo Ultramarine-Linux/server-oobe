@@ -365,6 +365,13 @@ h3 {
 	gap: 0.6rem;
 }
 
+.step-form {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-height: 0;
+}
+
 .step-content {
 	flex: 1;
 	overflow-y: auto;
@@ -388,6 +395,16 @@ h3 {
 
 .step-content > :first-child {
 	margin-top: 0;
+}
+
+.ip-addresses {
+	margin-top: 0.75rem;
+	font-size: 0.85rem;
+}
+
+.ip-addresses strong {
+	display: block;
+	margin-bottom: 0.2rem;
 }
 
 .field-label {
@@ -414,10 +431,39 @@ h3 {
 	box-shadow: none;
 }
 
-.field-error {
-	color: var(--foreground);
+.field-error,
+.password-status {
 	font-size: 0.8rem;
 	font-weight: 600;
+}
+
+.field-error {
+	color: var(--foreground);
+}
+
+.password-status {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	margin: 0.9rem 0;
+}
+
+.password-status-icon {
+	display: block;
+	flex: 0 0 1.1rem;
+	width: 1.1rem;
+	height: 1.1rem;
+	background-color: currentColor;
+	mask: var(--password-status-icon) center / contain no-repeat;
+	-webkit-mask: var(--password-status-icon) center / contain no-repeat;
+}
+
+.password-match {
+	color: var(--primary);
+}
+
+.password-mismatch {
+	color: #c62828;
 }
 
 .option-list {

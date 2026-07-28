@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import StepLayout from '$lib/components/StepLayout.svelte';
 	import { t } from '$lib/i18n.svelte';
 	let status = $state<'unknown' | 'online' | 'offline'>('unknown');
@@ -10,6 +11,10 @@
 		status = navigator.onLine ? 'online' : 'offline';
 		checking = false;
 	}
+
+	onMount(() => {
+		void check();
+	});
 </script>
 
 <StepLayout title={t('internet-title')} {onBack} {onContinue}>

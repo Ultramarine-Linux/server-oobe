@@ -26,5 +26,13 @@
 		<span class="status-pill">{t('fixture-mode')}</span>
 	{/if}
 </div>
-<div class="step-content">{@render children()}</div>
-<StepActions {onBack} {onContinue} {canContinue} {continueKey} {showBack} />
+<form
+	class="step-form"
+	onsubmit={(event) => {
+		event.preventDefault();
+		onContinue();
+	}}
+>
+	<div class="step-content">{@render children()}</div>
+	<StepActions {onBack} {onContinue} {canContinue} {continueKey} {showBack} />
+</form>

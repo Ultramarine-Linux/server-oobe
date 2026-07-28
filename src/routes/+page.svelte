@@ -27,6 +27,7 @@
 	let operationLoading = $state(false);
 	let password = $state('');
 	let redirecting = $state(false);
+	let ipAddresses = $state<string[]>([]);
 
 	let selectedStep = $derived(oobeState.activeStep);
 	let currentIndex = $derived(stepIndex(selectedStep));
@@ -49,6 +50,10 @@
 	onMount(() => {
 		detectLocale();
 		oobeState.keyboardLayout = detectKeyboardLayout();
+		fetch('/api/oobe/network')
+			.then((res) => (res.ok ? res.json() : { addresses: [] }))
+			.then((data: { addresses?: string[] }) => (ipAddresses = data.addresses ?? []))
+			.catch(() => (ipAddresses = []));
 		withTimeout(api.getState(), 5000)
 			.then((s) => {
 				oobeState = s;
@@ -159,6 +164,9 @@
 					if (wantsLocal) {
 						await callOperation('dashboard.install');
 						await callOperation('dashboard.handoff');
+					}
+					await callOperation('oobe.cleanup');
+					if (wantsLocal) {
 						redirecting = true;
 						await new Promise((resolve) => setTimeout(resolve, 4000));
 						window.location.href = '/';
@@ -172,6 +180,7 @@
 				return;
 			}
 			await markCompleted();
+			await callOperation('oobe.cleanup');
 			return;
 		}
 
@@ -278,7 +287,7 @@
 
 		<Shell steps={oobeState.steps} {selectedStep} onSelectStep={saveActiveStep}>
 			{#if selectedStep === 'welcome'}
-				<WelcomeStep {onBack} {onContinue} />
+				<WelcomeStep {onBack} {onContinue} {ipAddresses} />
 			{:else if selectedStep === 'devicename'}
 				<DeviceNameStep bind:hostname={oobeState.hostname} {onBack} {onContinue} />
 			{:else if selectedStep === 'whoareyou'}
