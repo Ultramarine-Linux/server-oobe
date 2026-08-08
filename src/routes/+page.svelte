@@ -63,13 +63,8 @@
 
 	async function saveActiveStep(step: StepId) {
 		try {
-			const res = await fetch('/api/oobe/state', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ activeStep: step })
-			});
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			oobeState = (await res.json()) as OobeState;
+			await callStatePatch({ activeStep: step });
+			oobeState = { ...oobeState, activeStep: step };
 		} catch (err) {
 			console.error('Failed to save active step:', err);
 			oobeState = { ...oobeState, activeStep: step };
@@ -78,13 +73,8 @@
 
 	async function saveHostingChoice(choice: 'global' | 'local' | 'both') {
 		try {
-			const res = await fetch('/api/oobe/state', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ hostingChoice: choice })
-			});
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			oobeState = (await res.json()) as OobeState;
+			await callStatePatch({ hostingChoice: choice });
+			oobeState = { ...oobeState, hostingChoice: choice };
 		} catch (err) {
 			console.error('Failed to save hosting choice:', err);
 			oobeState = { ...oobeState, hostingChoice: choice };
@@ -99,6 +89,15 @@
 		return res;
 	}
 
+	async function callStatePatch(payload: Record<string, unknown>) {
+		const res = await fetch('/api/oobe/operations', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ step: selectedStep, operation: 'state.patch', payload })
+		});
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+	}
+
 	function onBack() {
 		if (currentIndex > 0) {
 			saveActiveStep(fixtureSteps[currentIndex - 1].id);
@@ -107,13 +106,13 @@
 
 	async function patchStepStatus(step: StepId, status: 'complete' | 'failed') {
 		try {
-			const res = await fetch('/api/oobe/state', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ steps: [{ id: step, status }] })
-			});
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			oobeState = (await res.json()) as OobeState;
+			await callStatePatch({ steps: [{ id: step, status }] });
+			oobeState = {
+				...oobeState,
+				steps: oobeState.steps.map((current) =>
+					current.id === step ? { ...current, status } : current
+				)
+			};
 		} catch (err) {
 			console.error('Failed to patch step status:', err);
 			const updatedSteps = oobeState.steps.map((s) => (s.id === step ? { ...s, status } : s));
@@ -123,13 +122,8 @@
 
 	async function markCompleted() {
 		try {
-			const res = await fetch('/api/oobe/state', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ completed: true })
-			});
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			oobeState = (await res.json()) as OobeState;
+			await callStatePatch({ completed: true });
+			oobeState = { ...oobeState, completed: true };
 		} catch (err) {
 			console.error('Failed to mark completed:', err);
 			oobeState = { ...oobeState, completed: true };
