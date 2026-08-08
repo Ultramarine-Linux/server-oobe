@@ -13,7 +13,6 @@ export default defineConfig({
 			name: 'Chromium',
 			use: {
 				...devices['Desktop Chrome'],
-				channel: isCI ? 'chrome' : undefined,
 				headless: true
 			}
 		},
@@ -21,7 +20,6 @@ export default defineConfig({
 			name: 'Mobile Chrome',
 			use: {
 				...devices['Pixel 5'],
-				channel: isCI ? 'chrome' : undefined,
 				headless: true
 			}
 		}
@@ -29,7 +27,7 @@ export default defineConfig({
 	webServer: {
 		command:
 			'OOBE_FIXTURE_MODE=true VITE_FIXTURE_API=true pnpm exec vite dev --host 127.0.0.1 --port 4173',
-		reuseExistingServer: !isCI,
+		reuseExistingServer: !process.env.CI,
 		timeout: 120_000,
 		url: 'http://127.0.0.1:4173/'
 	}
