@@ -14,7 +14,7 @@ export default defineConfig({
 			name: 'Chromium',
 			use: {
 				...devices['Desktop Chrome'],
-				executablePath: chromiumExecutable,
+				launchOptions: { executablePath: chromiumExecutable },
 				headless: true
 			}
 		},
@@ -22,7 +22,7 @@ export default defineConfig({
 			name: 'Mobile Chrome',
 			use: {
 				...devices['Pixel 5'],
-				executablePath: chromiumExecutable,
+				launchOptions: { executablePath: chromiumExecutable },
 				headless: true
 			}
 		}
