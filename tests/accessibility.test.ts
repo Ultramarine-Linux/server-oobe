@@ -14,8 +14,12 @@ const stepIds = [
 ] as const;
 
 async function resetState(page: Page) {
-	await page.request.post(`${localURL}/api/oobe/state`, {
-		data: { activeStep: 'welcome', completed: false, steps: [] }
+	await page.request.post(`${localURL}/api/oobe/operations`, {
+		data: {
+			step: 'welcome',
+			operation: 'state.reset',
+			payload: { activeStep: 'welcome', completed: false, steps: [] }
+		}
 	});
 }
 

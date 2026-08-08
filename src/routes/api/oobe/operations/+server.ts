@@ -61,9 +61,33 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		const state = await loadState();
 
+		if (operation === 'state.patch') {
+			const patch = payload as Partial<typeof state>;
+			if (patch.activeStep !== undefined) state.activeStep = patch.activeStep;
+			if (patch.completed !== undefined) state.completed = patch.completed;
+			if (patch.hostname !== undefined) state.hostname = patch.hostname;
+			if (patch.administrator !== undefined) state.administrator = patch.administrator;
+			if (patch.keyboardLayout !== undefined) state.keyboardLayout = patch.keyboardLayout;
+			if (patch.hostingChoice !== undefined) state.hostingChoice = patch.hostingChoice;
+			if (patch.steps !== undefined) {
+				state.steps = state.steps.map((current) => {
+					const update = patch.steps?.find((candidate) => candidate.id === current.id);
+					return update ? { ...current, status: update.status } : current;
+				});
+			}
+			await saveState(state);
+			return json(result(opId, step, 'succeeded', false));
+		}
+
 		if (FIXTURE_MODE) {
 			// Fixture mode: accept any operation, update state where applicable, return success.
 			switch (operation) {
+				case 'state.reset':
+					state.activeStep = 'welcome';
+					state.completed = false;
+					state.steps = state.steps.map((step) => ({ ...step, status: 'pending' }));
+					await saveState(state);
+					return json(result(opId, step, 'succeeded', false));
 				case 'hostname.apply':
 					state.hostname = payload.hostname as string;
 					await saveState(state);
