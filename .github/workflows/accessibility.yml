@@ -40,5 +40,14 @@ jobs:
           cache: true
           runtime: node@lts
 
+      - name: Locate Chromium
+        run: |
+          chromium_path="$(command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$chromium_path" ]; then
+            echo "Chromium is not installed on the runner" >&2
+            exit 1
+          fi
+          echo "PLAYWRIGHT_CHROMIUM_EXECUTABLE=$chromium_path" >> "$GITHUB_ENV"
+
       - name: Run accessibility tests
         run: pnpm test:accessibility:ci
