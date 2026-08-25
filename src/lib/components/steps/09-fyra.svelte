@@ -4,10 +4,14 @@
 	import type { HostingChoice } from '$lib/oobe-state';
 	let {
 		hostingChoice = $bindable<HostingChoice | null>(null),
+		dashboardUrl = $bindable(''),
+		agentUrl = $bindable(''),
 		onBack,
 		onContinue
 	}: {
 		hostingChoice?: HostingChoice | null;
+		dashboardUrl?: string;
+		agentUrl?: string;
 		onBack: () => void;
 		onContinue: () => void;
 	} = $props();
@@ -48,12 +52,26 @@
 	</div>
 	{#if hostingChoice === 'global' || hostingChoice === 'both'}
 		<div class="panel global-prompt">
+			<label>
+				<span>Dashboard URL</span>
+				<input bind:value={dashboardUrl} placeholder="https://dashboard.example.com" />
+			</label>
+			<label>
+				<span>Agent URL (optional custom endpoint)</span>
+				<input bind:value={agentUrl} placeholder="wss://host.example.com:7780" />
+			</label>
 			<div class="status-icon">i</div>
 			<div>
 				<h3>{t('hosting-fyra-prompt-title')}</h3>
 				<p>{t('hosting-fyra-prompt-description')}</p>
 			</div>
 		</div>
+		{#if dashboardUrl}
+			<p class="status-note">
+				Tetra enrollment will start when you continue. Approve the device code in the hosted
+				Dashboard.
+			</p>
+		{/if}
 	{/if}
 </StepLayout>
 

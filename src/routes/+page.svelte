@@ -207,6 +207,12 @@
 				if (oobeState.hostingChoice) {
 					await saveHostingChoice(oobeState.hostingChoice);
 				}
+				if (oobeState.hostingChoice === 'global' || oobeState.hostingChoice === 'both') {
+					await callOperation('fyra.begin', {
+						dashboardUrl: oobeState.dashboardUrl,
+						agentUrl: oobeState.agentUrl
+					});
+				}
 			}
 
 			await api.completeStep(step);
@@ -286,7 +292,13 @@
 			{:else if selectedStep === 'tetra'}
 				<TetraStep {onBack} {onContinue} />
 			{:else if selectedStep === 'fyra-dash'}
-				<FyraStep bind:hostingChoice={oobeState.hostingChoice} {onBack} {onContinue} />
+				<FyraStep
+					bind:hostingChoice={oobeState.hostingChoice}
+					bind:dashboardUrl={oobeState.dashboardUrl}
+					bind:agentUrl={oobeState.agentUrl}
+					{onBack}
+					{onContinue}
+				/>
 			{:else}
 				<CompleteStep
 					{onBack}

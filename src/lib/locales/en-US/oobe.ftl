@@ -119,13 +119,13 @@ tetra-ready = Local Tetra detected. No token or certificate needs to be copied i
 hosting-title = Choose hosting
 hosting-lead = How do you want to access and manage this server?
 hosting-global-title = Global hosting (recommended)
-hosting-global-description = Manage this server through the Fyra global dashboard. Requires a Cloudflare tunnel for remote access.
+hosting-global-description = Manage this server through the hosted dashboard using Tetra's outbound connection. No port forwarding or tunnel is required.
 hosting-local-title = Local hosting
 hosting-local-description = Run the Ultramarine Dashboard on this server at port 3972. No outbound connection required.
 hosting-both-title = Both
 hosting-both-description = Host the dashboard locally and connect to Fyra for global management.
 hosting-fyra-prompt-title = Connect your Fyra account
-hosting-fyra-prompt-description = You will need to sign in with your Fyra credentials to authorize global management of this server. This link will be shown at the next step.
+hosting-fyra-prompt-description = Enter the hosted Dashboard URL. Tetra will connect outbound and show a device code for approval in the Dashboard. No inbound port forwarding is required.
 
 # Fyra
 fyra-title = Connect to Fyra
@@ -151,9 +151,9 @@ complete-tetra = Tetra
 complete-tetra-value = Ready for local pairing
 complete-dashboard = Dashboard
 complete-dashboard-value = Offline or not paired
-complete-hosting-global = Remote via Fyra (Cloudflare tunnel)
+complete-hosting-global = Hosted Dashboard (outbound Tetra connection)
 complete-hosting-local = Local dashboard (port 3972)
-complete-hosting-both = Local dashboard + Fyra
+complete-hosting-both = Local dashboard + hosted Dashboard
 local-recovery-title = Local recovery stays available
 local-recovery-description = Keep this local setup path available for recovery even when the global Dashboard cannot be reached.
 reboot = Reboot

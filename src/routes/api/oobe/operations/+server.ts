@@ -1,9 +1,10 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { loadState, saveState, DEFAULT_OOBE_PORT } from '$lib/server/state';
-import { access, writeFile, mkdir } from 'node:fs/promises';
+import { access, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { env } from 'node:process';
+import { setTimeout as delay } from 'node:timers/promises';
 import {
 	tetraSetHostname,
 	tetraNetworkStatus,
@@ -278,9 +279,67 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 
 			case 'fyra.begin': {
+				const dashboardUrl =
+					typeof payload.dashboardUrl === 'string' ? payload.dashboardUrl.trim() : '';
+				const agentUrl = typeof payload.agentUrl === 'string' ? payload.agentUrl.trim() : '';
+				if (!dashboardUrl) {
+					return json(result(opId, step, 'failed', true, 'Dashboard URL is required'));
+				}
+				try {
+					const dashboard = new URL(dashboardUrl);
+					if (!['http:', 'https:'].includes(dashboard.protocol))
+						throw new Error('Dashboard URL must use HTTP or HTTPS');
+					if (agentUrl && !/^wss?:\/\//.test(agentUrl))
+						throw new Error('Agent URL must use ws:// or wss://');
+				} catch (e) {
+					return json(
+						result(
+							opId,
+							step,
+							'failed',
+							true,
+							e instanceof Error ? e.message : 'Invalid enrollment URL'
+						)
+					);
+				}
+				const approvalFile = `/run/ultramarine-server-oobe/tetra-enrollment-${opId}.json`;
+				try {
+					await mkdir('/run/ultramarine-server-oobe', { recursive: true, mode: 0o700 });
+					const args = ['enroll', '--dashboard-url', dashboardUrl, '--approval-file', approvalFile];
+					if (agentUrl) args.push('--agent-url', agentUrl);
+					const child = spawn(env.TETRA_PATH || '/usr/bin/tetra', args, {
+						detached: true,
+						stdio: 'ignore'
+					});
+					child.unref();
+				} catch (e) {
+					return json(
+						result(
+							opId,
+							step,
+							'failed',
+							true,
+							e instanceof Error ? e.message : 'Failed to start Tetra enrollment'
+						)
+					);
+				}
+				let approval: { verification_uri?: string; user_code?: string } | undefined;
+				for (let attempt = 0; attempt < 20; attempt += 1) {
+					try {
+						approval = JSON.parse(await readFile(approvalFile, 'utf8')) as typeof approval;
+						break;
+					} catch {
+						await delay(250);
+					}
+				}
 				state.fyra.status = 'pending';
+				state.fyra.verificationUri = approval ? approval.verification_uri : undefined;
+				state.fyra.userCode = approval ? approval.user_code : undefined;
+				state.fyra.message = approval
+					? 'Open the verification URL and approve this host.'
+					: `Enrollment started. Approval details are in ${approvalFile}.`;
 				await saveState(state);
-				return json(result(opId, step, 'succeeded', false, 'Fyra authorization started'));
+				return json(result(opId, step, 'succeeded', true, state.fyra.message));
 			}
 
 			case 'system.reboot': {

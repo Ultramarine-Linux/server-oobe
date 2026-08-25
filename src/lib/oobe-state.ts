@@ -29,6 +29,9 @@ export type TetraState = {
 export type FyraState = {
 	status: 'not-started' | 'pending' | 'authorized' | 'failed';
 	serverName?: string;
+	verificationUri?: string;
+	userCode?: string;
+	message?: string;
 };
 
 export type DashboardState = {
@@ -52,6 +55,8 @@ export type OobeState = {
 	administrator: string;
 	keyboardLayout?: string;
 	hostingChoice?: HostingChoice | null;
+	dashboardUrl?: string;
+	agentUrl?: string;
 	tetra: TetraState;
 	fyra: FyraState;
 	dashboard: DashboardState;
@@ -133,6 +138,8 @@ export const fixtureState: OobeState = {
 	administrator: '',
 	keyboardLayout: undefined,
 	hostingChoice: null,
+	dashboardUrl: '',
+	agentUrl: '',
 	tetra: { installed: false, running: false, paired: false },
 	fyra: { status: 'not-started' },
 	dashboard: { installed: false, installing: false },
