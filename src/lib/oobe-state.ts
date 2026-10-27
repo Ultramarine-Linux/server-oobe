@@ -1,12 +1,17 @@
+import type { Eap8021x } from './eap-8021x';
+import { fixtureHost } from './fixture-hosts';
+import type { InterfaceAddress, InterfaceType } from './network-config';
+
 export type StepId =
 	| 'welcome'
 	| 'devicename'
 	| 'whoareyou'
 	| 'password'
 	| 'internet'
-	| 'tweaks'
-	| 'tetra'
-	| 'fyra-dash'
+	| 'updates'
+	| 'remote-access'
+	| 'ssh-key'
+	| 'dashboard'
 	| 'complete';
 
 export type StepStatus =
@@ -19,32 +24,103 @@ export type OobeStep = {
 	description: string;
 };
 
-export type TetraState = {
-	installed: boolean;
-	running: boolean;
-	paired: boolean;
-	fingerprint?: string;
+/** How the server applies updates; Tetra decides what that means on bootc or mutable installs. */
+export type UpdatePolicy = 'automatic' | 'notify';
+
+export type AccessMode = 'domain' | 'ip';
+export type AcmeChallenge = 'http-01' | 'dns-01';
+
+/** How browsers reach the dashboard. DNS provider credentials are never stored. */
+export type AccessState = {
+	mode: AccessMode;
+	hostname: string;
+	challenge: AcmeChallenge;
+	dnsProvider?: string;
+	/** Set once Tetra has accepted the configuration. */
+	applied: boolean;
+	passkeysAvailable?: boolean;
 };
 
-export type FyraState = {
-	status: 'not-started' | 'pending' | 'authorized' | 'failed';
-	serverName?: string;
-	verificationUri?: string;
-	userCode?: string;
+/** Which remote access services this setup enabled. Keys and tokens are never stored. */
+export type RemoteAccessState = {
+	tailscale: boolean;
+	tailscaleServe: boolean;
+	tailscaleFunnel: boolean;
+	cloudflared: boolean;
+};
+
+/**
+ * Remote access choices in the browser, secrets included. Lives only in page
+ * memory: it is sent to Tetra once and never persisted.
+ */
+export type RemoteAccessForm = {
+	tailscale: boolean;
+	tailscaleAuthKey: string;
+	tailscaleServe: boolean;
+	tailscaleFunnel: boolean;
+	funnelConfirmed: boolean;
+	cloudflared: boolean;
+	cloudflaredToken: string;
+};
+
+/** Access choices in the browser. DNS credentials live only in page memory. */
+export type AccessForm = {
+	mode: AccessMode;
+	hostname: string;
+	challenge: AcmeChallenge;
+	dnsProvider: string;
+	dnsCredentials: Record<string, string>;
+};
+
+/** Result of setup.complete, shown on the final screen. */
+export type SetupCompleteResult = {
+	dashboardUrl?: string;
+	handoffInSeconds: number;
+};
+
+/** An interface from Tetra's `network.interfaces`, without its MAC address. */
+export type NetworkInterface = {
+	name: string;
+	/** Missing from older Tetra; see `interfaceType`. */
+	type?: InterfaceType;
+	operstate?: string;
+	addresses?: InterfaceAddress[];
+};
+
+export type WifiSecurity = 'open' | 'wpa-personal' | 'wpa-enterprise' | 'unknown';
+
+/** A network from Tetra's `network.scan_wifi`. */
+export type WifiNetwork = {
+	ssid: string;
+	security: WifiSecurity;
+	signal?: number;
+	frequency?: number;
+	in_use?: boolean;
+};
+
+/** Result of the `network.check` operation. */
+export type NetworkCheck = { ipv4: boolean; ipv6: boolean; dns: boolean };
+
+/**
+ * A network change being applied (`network.configure` or
+ * `network.connect_wifi`), shown while the browser may lose its connection.
+ */
+export type NetworkApplyState = {
+	status: 'applying' | 'waiting' | 'kept' | 'rolled-back' | 'failed';
+	/** Where the OOBE should be reachable afterwards. */
+	urls: { label: string; href: string }[];
+	/** Some addresses come from DHCP or SLAAC and may differ from `urls`. */
+	automatic: boolean;
+	/** Seconds Tetra waits for a confirmation before it rolls the change back. */
+	rollbackInSeconds: number;
 	message?: string;
 };
 
-export type DashboardState = {
-	installed: boolean;
-	installing: boolean;
-};
-
-export type CloudflareState = {
-	installed: boolean;
-	installing: boolean;
-};
-
-export type HostingChoice = 'global' | 'local' | 'both';
+/** `security` for Tetra's `network.connect_wifi`, tagged by `type`. */
+export type WifiSecurityProfile =
+	| { type: 'open' }
+	| { type: 'wpa-personal'; password: string }
+	| ({ type: 'wpa-enterprise' } & Eap8021x);
 
 export type OobeState = {
 	version: 1;
@@ -54,13 +130,36 @@ export type OobeState = {
 	hostname: string;
 	administrator: string;
 	keyboardLayout?: string;
-	hostingChoice?: HostingChoice | null;
-	dashboardUrl?: string;
-	agentUrl?: string;
-	tetra: TetraState;
-	fyra: FyraState;
-	dashboard: DashboardState;
-	cloudflare: CloudflareState;
+	keyboardVariant?: string;
+	updatePolicy: UpdatePolicy;
+	sshPublicKey?: string;
+	networkInterfaces?: NetworkInterface[];
+	access: AccessState;
+	remoteAccess: RemoteAccessState;
+};
+
+export const defaultAccess: AccessState = {
+	mode: 'domain',
+	hostname: '',
+	challenge: 'http-01',
+	applied: false
+};
+
+export const defaultRemoteAccess: RemoteAccessState = {
+	tailscale: false,
+	tailscaleServe: true,
+	tailscaleFunnel: false,
+	cloudflared: false
+};
+
+/** Response of /api/oobe/session. The setup session token itself stays in an HttpOnly cookie. */
+export type SessionResponse = {
+	authenticated: boolean;
+	setupRequired: boolean;
+	adminExists?: boolean;
+	error?: 'invalid_code' | 'rate_limited' | 'setup_complete' | 'unavailable';
+	retryAfter?: number;
+	message?: string;
 };
 
 export type OperationStatus = 'pending' | 'running' | 'succeeded' | 'failed';
@@ -98,28 +197,34 @@ export const fixtureSteps: OobeStep[] = [
 		description: 'step-password-description'
 	},
 	{
+		id: 'ssh-key',
+		label: 'step-ssh-key-label',
+		status: 'pending',
+		description: 'step-ssh-key-description'
+	},
+	{
 		id: 'internet',
 		label: 'step-internet-label',
 		status: 'pending',
 		description: 'step-internet-description'
 	},
 	{
-		id: 'tweaks',
-		label: 'step-tweaks-label',
+		id: 'updates',
+		label: 'step-updates-label',
 		status: 'pending',
-		description: 'step-tweaks-description'
+		description: 'step-updates-description'
 	},
 	{
-		id: 'tetra',
-		label: 'step-tetra-label',
+		id: 'remote-access',
+		label: 'step-remote-access-label',
 		status: 'pending',
-		description: 'step-tetra-description'
+		description: 'step-remote-access-description'
 	},
 	{
-		id: 'fyra-dash',
-		label: 'step-fyra-label',
+		id: 'dashboard',
+		label: 'step-dashboard-label',
 		status: 'pending',
-		description: 'step-fyra-description'
+		description: 'step-dashboard-description'
 	},
 	{
 		id: 'complete',
@@ -137,13 +242,12 @@ export const fixtureState: OobeState = {
 	hostname: '',
 	administrator: '',
 	keyboardLayout: undefined,
-	hostingChoice: null,
-	dashboardUrl: '',
-	agentUrl: '',
-	tetra: { installed: false, running: false, paired: false },
-	fyra: { status: 'not-started' },
-	dashboard: { installed: false, installing: false },
-	cloudflare: { installed: false, installing: false }
+	keyboardVariant: undefined,
+	updatePolicy: 'automatic',
+	sshPublicKey: '',
+	networkInterfaces: fixtureHost().interfaces.filter((entry) => entry.name !== 'lo'),
+	access: { ...defaultAccess },
+	remoteAccess: { ...defaultRemoteAccess }
 };
 
 export function stepIndex(id: StepId): number {
