@@ -1,6 +1,6 @@
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 
-const catalogSources = import.meta.glob('../../../po/*/server-oobe.ftl', {
+const catalogSources = import.meta.glob('../../po/*/server-oobe.ftl', {
 	eager: true,
 	query: '?raw',
 	import: 'default'
