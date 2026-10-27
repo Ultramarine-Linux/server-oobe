@@ -1,24 +1,35 @@
 <script lang="ts">
+	import Icon from '$lib/components/Icon.svelte';
 	import Shell from '$lib/components/Shell.svelte';
 	import WelcomeStep from '$lib/components/steps/01-welcome.svelte';
 	import DeviceNameStep from '$lib/components/steps/03-device-name.svelte';
 	import UserStep from '$lib/components/steps/04-user.svelte';
 	import PasswordStep from '$lib/components/steps/05-password.svelte';
 	import InternetStep from '$lib/components/steps/06-internet.svelte';
-	import TweaksStep from '$lib/components/steps/07-tweaks.svelte';
-	import TetraStep from '$lib/components/steps/08-tetra.svelte';
-	import FyraStep from '$lib/components/steps/09-fyra.svelte';
+	import UpdatesStep from '$lib/components/steps/07-updates.svelte';
+	import RemoteAccessStep from '$lib/components/steps/08-remote-access.svelte';
+	import SshKeyStep from '$lib/components/steps/08-ssh-key.svelte';
+	import DashboardStep from '$lib/components/steps/09-dashboard.svelte';
 	import CompleteStep from '$lib/components/steps/10-complete.svelte';
-	import { api } from '$lib/oobe-api';
+	import { api, confirmNetworkChange, SetupSessionRequiredError } from '$lib/oobe-api';
+	import { oobeUrl } from '$lib/net';
+	import { expectedAddresses, type NetworkConfigureRequest } from '$lib/network-config';
 	import {
 		fixtureState,
 		fixtureSteps,
 		stepIndex,
+		type AccessForm,
+		type NetworkApplyState,
+		type NetworkCheck,
+		type OobeState,
+		type RemoteAccessForm,
+		type SetupCompleteResult,
 		type StepId,
-		type OobeState
+		type WifiNetwork,
+		type WifiSecurityProfile
 	} from '$lib/oobe-state';
 	import { onMount } from 'svelte';
-	import { detectLocale } from '$lib/i18n.svelte';
+	import { detectLocale, t } from '$lib/i18n.svelte';
 	import { detectKeyboardLayout } from '$lib/keyboard-detect';
 
 	let oobeState = $state<OobeState>(fixtureState);
@@ -26,7 +37,39 @@
 	let errorMessage = $state('');
 	let operationLoading = $state(false);
 	let password = $state('');
-	let redirecting = $state(false);
+	let retryStep = $state<StepId | null>(null);
+	let networkConfig = $state<NetworkConfigureRequest | null>(null);
+	let networkApply = $state<NetworkApplyState | null>(null);
+	let notice = $state('');
+	let ipAddresses = $state<string[]>([]);
+	let authenticated = $state(false);
+	let setupCode = $state('');
+	let setupCodeError = $state('');
+	let finished = $state<SetupCompleteResult | null>(null);
+	// Secrets (auth keys, tunnel tokens, DNS credentials) live only here, are
+	// sent to Tetra once, and are cleared afterwards. They are never persisted.
+	let remoteAccessForm = $state<RemoteAccessForm>({
+		tailscale: false,
+		tailscaleAuthKey: '',
+		tailscaleServe: true,
+		tailscaleFunnel: false,
+		funnelConfirmed: false,
+		cloudflared: false,
+		cloudflaredToken: ''
+	});
+	let accessForm = $state<AccessForm>({
+		mode: 'domain',
+		hostname: '',
+		challenge: 'http-01',
+		dnsProvider: '',
+		dnsCredentials: {}
+	});
+
+	// Tetra waits up to 10 s for the interface's old addresses before it answers,
+	// then up to 60 s for network.confirm before it rolls the change back.
+	const NETWORK_SETTLE_SECONDS = 10;
+	const NETWORK_ROLLBACK_SECONDS = 60;
+	const CONFIRM_POLL_MS = 2000;
 
 	let selectedStep = $derived(oobeState.activeStep);
 	let currentIndex = $derived(stepIndex(selectedStep));
@@ -49,36 +92,208 @@
 	onMount(() => {
 		detectLocale();
 		oobeState.keyboardLayout = detectKeyboardLayout();
-		withTimeout(api.getState(), 5000)
-			.then((s) => {
-				oobeState = s;
+		loadAddresses();
+		// Opened from a link shown while a network change was applied: reaching
+		// the OOBE here is what keeps the change.
+		const changeId = new URLSearchParams(location.search).get('network-change');
+		if (changeId) {
+			history.replaceState(history.state, '', location.pathname);
+			void confirmNetworkChange(changeId, 20_000).then((result) => {
+				if (result?.status === 'kept') notice = t('network-change-kept');
+				else if (result?.status === 'rolled-back') errorMessage = t('network-apply-rolled-back');
+			});
+		}
+		withTimeout(api.getSession(), 5000)
+			.then(async (session) => {
+				if (session.error === 'unavailable') errorMessage = t('setup-code-unavailable');
+				else if (!session.setupRequired) errorMessage = t('setup-code-complete');
+				authenticated = session.authenticated;
+				if (authenticated) await loadState();
 				loaded = true;
 			})
 			.catch((err) => {
-				console.error('Failed to load OOBE state:', err);
-				errorMessage = 'Unable to load setup state. Using defaults.';
+				console.error('Failed to check setup session:', err);
+				errorMessage = t('setup-code-unavailable');
 				loaded = true;
 			});
 	});
 
+	function loadAddresses() {
+		fetch('/api/oobe/network')
+			.then((res) => (res.ok ? res.json() : { addresses: [] }))
+			.then((data: { addresses?: string[] }) => (ipAddresses = data.addresses ?? []))
+			.catch(() => (ipAddresses = []));
+	}
+
+	async function loadState() {
+		try {
+			const s = await withTimeout(api.getState(), 5000);
+			oobeState = s;
+			accessForm = {
+				...accessForm,
+				mode: s.access.mode,
+				hostname: s.access.hostname,
+				challenge: s.access.challenge,
+				dnsProvider: s.access.dnsProvider ?? ''
+			};
+			if (s.activeStep === 'internet') void refreshNetworkInterfaces();
+		} catch (err) {
+			if (err instanceof SetupSessionRequiredError) return requireSetupCode();
+			console.error('Failed to load OOBE state:', err);
+			errorMessage = t('setup-state-unavailable');
+		}
+	}
+
+	/** The setup session is missing or expired: ask for the code again on Welcome. */
+	function requireSetupCode() {
+		authenticated = false;
+		retryStep = null;
+		setupCodeError = t('setup-code-expired');
+		oobeState = { ...oobeState, activeStep: 'welcome' };
+	}
+
+	async function redeemSetupCode(): Promise<boolean> {
+		setupCodeError = '';
+		const session = await api.redeemSetupCode(setupCode);
+		if (session.authenticated) {
+			authenticated = true;
+			setupCode = '';
+			return true;
+		}
+		setupCodeError =
+			session.error === 'rate_limited'
+				? t('setup-code-rate-limited', { seconds: session.retryAfter ?? 60 })
+				: session.error === 'setup_complete'
+					? t('setup-code-complete')
+					: session.error === 'unavailable'
+						? t('setup-code-unavailable')
+						: t('setup-code-invalid');
+		return false;
+	}
+
+	async function refreshNetworkInterfaces() {
+		try {
+			const result = await api.startOperation('internet', 'network.interfaces');
+			if (result.status === 'succeeded' && result.message) {
+				oobeState.networkInterfaces = JSON.parse(result.message);
+			}
+		} catch (err) {
+			console.error('Failed to load network interfaces:', err);
+		}
+	}
+
 	async function saveActiveStep(step: StepId) {
+		if (!authenticated && step !== 'welcome') return;
 		try {
 			await callStatePatch({ activeStep: step });
 			oobeState = { ...oobeState, activeStep: step };
+			networkApply = null;
+			if (step === 'internet') void refreshNetworkInterfaces();
 		} catch (err) {
 			console.error('Failed to save active step:', err);
 			oobeState = { ...oobeState, activeStep: step };
 		}
 	}
 
-	async function saveHostingChoice(choice: 'global' | 'local' | 'both') {
-		try {
-			await callStatePatch({ hostingChoice: choice });
-			oobeState = { ...oobeState, hostingChoice: choice };
-		} catch (err) {
-			console.error('Failed to save hosting choice:', err);
-			oobeState = { ...oobeState, hostingChoice: choice };
+	async function scanWifi(interfaceName: string) {
+		const result = await api.startOperation('internet', 'network.scan_wifi', {
+			interface: interfaceName
+		});
+		if (result.status === 'failed') throw new Error(result.message || 'Wi-Fi scan failed');
+		return result.message ? (JSON.parse(result.message) as WifiNetwork[]) : [];
+	}
+
+	function newChangeId(): string {
+		const bytes = crypto.getRandomValues(new Uint8Array(18));
+		return btoa(String.fromCharCode(...bytes))
+			.replaceAll('+', '-')
+			.replaceAll('/', '_');
+	}
+
+	const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+	/**
+	 * Apply a network change (`network.configure` or `network.connect_wifi`)
+	 * and keep it. The change can move the server to addresses this page is not
+	 * using, so before sending it this shows where setup will be, then asks the
+	 * OOBE to keep the change as soon as it answers again (here, or in a tab
+	 * opened from one of those links). Tetra rolls the change back if nobody
+	 * does. Resolves to whether the change was kept.
+	 */
+	async function applyNetworkChange(
+		operation: 'network.configure' | 'network.connect_wifi',
+		payload: Record<string, unknown>,
+		expected: { addresses: string[]; automatic: boolean }
+	): Promise<boolean> {
+		const changeId = newChangeId();
+		const deadline = Date.now() + (NETWORK_SETTLE_SECONDS + NETWORK_ROLLBACK_SECONDS + 5) * 1000;
+		networkApply = {
+			status: 'applying',
+			urls: expected.addresses.map((address) => ({
+				label: oobeUrl(address),
+				href: `${oobeUrl(address)}/?network-change=${changeId}`
+			})),
+			automatic: expected.automatic,
+			rollbackInSeconds: NETWORK_ROLLBACK_SECONDS
+		};
+		const settle = (status: NetworkApplyState['status'], message?: string) => {
+			if (networkApply) networkApply = { ...networkApply, status, message };
+			return status === 'kept';
+		};
+
+		let failure: string | undefined;
+		let lost = false;
+		let answered = false;
+		const request = withTimeout(
+			api.startOperation('internet', operation, { ...payload, changeId }),
+			(NETWORK_SETTLE_SECONDS + 15) * 1000
+		)
+			.then((res) => {
+				if (res.status === 'failed') failure = res.message || t('network-apply-failed');
+			})
+			.catch((err) => {
+				if (err instanceof SetupSessionRequiredError) failure = err.message;
+				// Otherwise the connection is gone, as expected when the address changed.
+				else lost = true;
+			})
+			.finally(() => (answered = true));
+		await Promise.race([request, sleep(1000)]);
+
+		while (Date.now() < deadline) {
+			if (failure !== undefined) return settle('failed', failure);
+			const result = await confirmNetworkChange(changeId);
+			if (result?.status === 'kept') return settle('kept');
+			if (result?.status === 'rolled-back') return settle('rolled-back');
+			if (result?.status === 'failed') return settle('failed', result.message);
+			if (answered && (lost || !result)) settle('waiting');
+			await sleep(CONFIRM_POLL_MS);
 		}
+		return settle('rolled-back');
+	}
+
+	async function connectWifi(
+		interfaceName: string,
+		ssid: string,
+		hidden: boolean,
+		security: WifiSecurityProfile
+	) {
+		const current =
+			oobeState.networkInterfaces?.find((entry) => entry.name === interfaceName)?.addresses ?? [];
+		// Wi-Fi addresses are automatic: the current ones are the best guess.
+		const kept = await applyNetworkChange(
+			'network.connect_wifi',
+			{ interface: interfaceName, ssid, hidden, security },
+			expectedAddresses({}, current)
+		);
+		if (kept) {
+			await refreshNetworkInterfaces();
+			loadAddresses();
+		}
+	}
+
+	async function checkNetwork(): Promise<NetworkCheck> {
+		const result = await callOperation('network.check');
+		return JSON.parse(result.message ?? '{}') as NetworkCheck;
 	}
 
 	async function callOperation(operation: string, payload?: Record<string, unknown>) {
@@ -90,12 +305,8 @@
 	}
 
 	async function callStatePatch(payload: Record<string, unknown>) {
-		const res = await fetch('/api/oobe/operations', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ step: selectedStep, operation: 'state.patch', payload })
-		});
-		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		const res = await api.startOperation(selectedStep, 'state.patch', payload);
+		if (res.status === 'failed') throw new Error(res.message || 'Failed to save setup state');
 	}
 
 	function onBack() {
@@ -120,52 +331,43 @@
 		}
 	}
 
-	async function markCompleted() {
-		try {
-			await callStatePatch({ completed: true });
-			oobeState = { ...oobeState, completed: true };
-		} catch (err) {
-			console.error('Failed to mark completed:', err);
-			oobeState = { ...oobeState, completed: true };
-		}
-	}
-
 	async function onContinue() {
 		if (operationLoading) return;
 		errorMessage = '';
 
 		const step = selectedStep;
 
-		// Last step: finish or hand off to local dashboard.
-		if (currentIndex >= fixtureSteps.length - 1) {
-			const choice = oobeState.hostingChoice;
-			const wantsLocal = choice === 'local' || choice === 'both';
-			const wantsGlobal = choice === 'global' || choice === 'both';
-
-			if (wantsLocal || wantsGlobal) {
-				operationLoading = true;
-				try {
-					await markCompleted();
-					if (wantsGlobal) {
-						await callOperation('cloudflare.install');
-						await callOperation('fyra.begin');
-					}
-					if (wantsLocal) {
-						await callOperation('dashboard.install');
-						await callOperation('dashboard.handoff');
-						redirecting = true;
-						await new Promise((resolve) => setTimeout(resolve, 4000));
-						window.location.href = '/';
-					}
-				} catch (err) {
-					errorMessage = String(err);
-					redirecting = false;
-				} finally {
-					operationLoading = false;
-				}
+		// Nothing else can run until Tetra has accepted the setup code.
+		if (step === 'welcome' && !authenticated) {
+			operationLoading = true;
+			try {
+				if (!(await redeemSetupCode())) return;
+				await loadState();
+				// Resume where a previous session left off.
+				if (oobeState.activeStep !== 'welcome') return;
+			} catch (err) {
+				errorMessage = String(err);
 				return;
+			} finally {
+				operationLoading = false;
 			}
-			await markCompleted();
+		}
+
+		// Last step. setup.complete ends this setup session, disables the code,
+		// starts the dashboard and stops this OOBE a few seconds later, so it is
+		// the final call and the final screen comes from its response.
+		if (currentIndex >= fixtureSteps.length - 1) {
+			operationLoading = true;
+			try {
+				const result = await callOperation('setup.complete');
+				finished = JSON.parse(result.message ?? '{}') as SetupCompleteResult;
+				authenticated = false;
+			} catch (err) {
+				if (err instanceof SetupSessionRequiredError) requireSetupCode();
+				else errorMessage = String(err);
+			} finally {
+				operationLoading = false;
+			}
 			return;
 		}
 
@@ -176,11 +378,10 @@
 					await callOperation('hostname.apply', { hostname: oobeState.hostname });
 				}
 				if (oobeState.keyboardLayout) {
-					try {
-						await callOperation('keyboard.apply', { layout: oobeState.keyboardLayout });
-					} catch (err) {
-						console.error('Failed to apply keyboard layout:', err);
-					}
+					await callOperation('keyboard.apply', {
+						layout: oobeState.keyboardLayout,
+						variant: oobeState.keyboardVariant
+					});
 				}
 			}
 			if (step === 'whoareyou') {
@@ -194,28 +395,91 @@
 					password = '';
 				}
 			}
-			if (step === 'internet') {
-				await callOperation('network.check');
-			}
-			if (step === 'tweaks') {
-				await callOperation('tweaks.apply', { defaults: true, automaticUpdates: true });
-			}
-			if (step === 'tetra') {
-				await callOperation('tetra.start');
-			}
-			if (step === 'fyra-dash') {
-				if (oobeState.hostingChoice) {
-					await saveHostingChoice(oobeState.hostingChoice);
+			if (step === 'internet' && networkConfig) {
+				const config = networkConfig;
+				const current =
+					oobeState.networkInterfaces?.find((entry) => entry.name === config.interface)
+						?.addresses ?? [];
+				const kept = await applyNetworkChange(
+					'network.configure',
+					config,
+					expectedAddresses(config, current)
+				);
+				if (!kept) {
+					throw new Error(
+						networkApply?.message ||
+							t(
+								networkApply?.status === 'rolled-back'
+									? 'network-apply-rolled-back'
+									: 'network-apply-failed'
+							)
+					);
 				}
-				if (oobeState.hostingChoice === 'global' || oobeState.hostingChoice === 'both') {
-					await callOperation('fyra.begin', {
-						dashboardUrl: oobeState.dashboardUrl,
-						agentUrl: oobeState.agentUrl
+				await refreshNetworkInterfaces();
+				loadAddresses();
+			}
+			if (step === 'updates') {
+				await callOperation('updates.set_policy', { policy: oobeState.updatePolicy });
+			}
+			if (step === 'remote-access') {
+				const form = remoteAccessForm;
+				if (form.tailscale) {
+					await callOperation('remote_access.tailscale_up', {
+						auth_key: form.tailscaleAuthKey,
+						serve: form.tailscaleServe,
+						funnel: form.tailscaleFunnel,
+						confirmFunnel: form.funnelConfirmed
 					});
+					form.tailscaleAuthKey = '';
+					oobeState.remoteAccess = {
+						...oobeState.remoteAccess,
+						tailscale: true,
+						tailscaleServe: form.tailscaleServe,
+						tailscaleFunnel: form.tailscaleFunnel
+					};
 				}
+				if (form.cloudflared) {
+					await callOperation('remote_access.cloudflared_set_token', {
+						token: form.cloudflaredToken
+					});
+					form.cloudflaredToken = '';
+					oobeState.remoteAccess = { ...oobeState.remoteAccess, cloudflared: true };
+				}
+			}
+			if (step === 'ssh-key' && oobeState.sshPublicKey) {
+				await callOperation('ssh-key.apply', { publicKey: oobeState.sshPublicKey });
+			}
+			if (step === 'dashboard') {
+				const form = accessForm;
+				const hostname = form.hostname.trim();
+				const payload =
+					form.mode === 'ip'
+						? { mode: 'ip', hostname }
+						: form.challenge === 'http-01'
+							? { mode: 'domain', hostname, challenge: 'http-01' }
+							: {
+									mode: 'domain',
+									hostname,
+									challenge: 'dns-01',
+									dns_provider: form.dnsProvider,
+									dns_credentials: form.dnsCredentials
+								};
+				const result = await callOperation('access.set', payload);
+				const applied = JSON.parse(result.message ?? '{}') as { passkeysAvailable?: boolean };
+				form.dnsCredentials = {};
+				oobeState.access = {
+					mode: form.mode,
+					hostname,
+					challenge: form.challenge,
+					dnsProvider:
+						form.mode === 'domain' && form.challenge === 'dns-01' ? form.dnsProvider : undefined,
+					applied: true,
+					passkeysAvailable: applied.passkeysAvailable
+				};
 			}
 
 			await api.completeStep(step);
+			retryStep = null;
 			// Update local step status so sidebar shows the checkmark immediately
 			oobeState.steps = oobeState.steps.map((s) =>
 				s.id === step ? { ...s, status: 'complete' as import('$lib/oobe-state').StepStatus } : s
@@ -223,7 +487,12 @@
 			const nextStep = fixtureSteps[currentIndex + 1]?.id;
 			if (nextStep) await saveActiveStep(nextStep);
 		} catch (err) {
+			if (err instanceof SetupSessionRequiredError) {
+				requireSetupCode();
+				return;
+			}
 			errorMessage = String(err);
+			retryStep = step;
 			await patchStepStatus(step, 'failed');
 		} finally {
 			operationLoading = false;
@@ -259,110 +528,101 @@
 </svelte:head>
 
 {#if !loaded}
-	<div class="loading-screen">
-		<p>Loading setup state…</p>
-	</div>
+	<main class="loading-screen">
+		<span class="spinner" aria-hidden="true"></span>
+		<p role="status">{t('loading-setup')}</p>
+	</main>
 {:else}
-	{#if redirecting}
-		<div class="redirect-overlay">
-			<p class="redirect-title">Starting dashboard…</p>
-			<p class="redirect-sub">You will be redirected automatically.</p>
-		</div>
-	{:else}
-		{#if errorMessage}
-			<div class="global-error" role="alert">
-				<p>{errorMessage}</p>
-				<button type="button" onclick={() => (errorMessage = '')}>Dismiss</button>
+	{#snippet banners()}
+		{#if notice}
+			<div class="banner banner-notice" role="status">
+				<Icon name="check-circle" />
+				<p>{notice}</p>
+				<div class="banner-actions">
+					<button class="ghost-button" type="button" onclick={() => (notice = '')}
+						>{t('dismiss')}</button
+					>
+				</div>
 			</div>
 		{/if}
+		{#if errorMessage}
+			<div class="banner banner-error" role="alert">
+				<Icon name="alert-circle" />
+				<p>{errorMessage}</p>
+				<div class="banner-actions">
+					{#if retryStep}
+						<button
+							class="ghost-button"
+							type="button"
+							onclick={() => {
+								errorMessage = '';
+								void onContinue();
+							}}
+						>
+							{t('retry')}
+						</button>
+					{/if}
+					<button
+						class="ghost-button"
+						type="button"
+						onclick={() => {
+							errorMessage = '';
+							retryStep = null;
+						}}>{t('dismiss')}</button
+					>
+				</div>
+			</div>
+		{/if}
+	{/snippet}
 
-		<Shell steps={oobeState.steps} {selectedStep} onSelectStep={saveActiveStep}>
-			{#if selectedStep === 'welcome'}
-				<WelcomeStep {onBack} {onContinue} />
-			{:else if selectedStep === 'devicename'}
-				<DeviceNameStep bind:hostname={oobeState.hostname} {onBack} {onContinue} />
-			{:else if selectedStep === 'whoareyou'}
-				<UserStep bind:username={oobeState.administrator} {onBack} {onContinue} />
-			{:else if selectedStep === 'password'}
-				<PasswordStep bind:password {onBack} {onContinue} />
-			{:else if selectedStep === 'internet'}
-				<InternetStep {onBack} {onContinue} />
-			{:else if selectedStep === 'tweaks'}
-				<TweaksStep {onBack} {onContinue} />
-			{:else if selectedStep === 'tetra'}
-				<TetraStep {onBack} {onContinue} />
-			{:else if selectedStep === 'fyra-dash'}
-				<FyraStep
-					bind:hostingChoice={oobeState.hostingChoice}
-					bind:dashboardUrl={oobeState.dashboardUrl}
-					bind:agentUrl={oobeState.agentUrl}
-					{onBack}
-					{onContinue}
-				/>
-			{:else}
-				<CompleteStep
-					{onBack}
-					{onContinue}
-					{onReboot}
-					{onShutdown}
-					hostname={oobeState.hostname}
-					administrator={oobeState.administrator}
-					hostingChoice={oobeState.hostingChoice}
-				/>
-			{/if}
-		</Shell>
-	{/if}
+	<Shell steps={oobeState.steps} {selectedStep} onSelectStep={saveActiveStep} {banners}>
+		{#if selectedStep === 'welcome'}
+			<WelcomeStep
+				{onBack}
+				{onContinue}
+				urls={ipAddresses.map((address) => oobeUrl(address))}
+				needsSetupCode={!authenticated}
+				bind:setupCode
+				{setupCodeError}
+			/>
+		{:else if selectedStep === 'devicename'}
+			<DeviceNameStep bind:hostname={oobeState.hostname} {onBack} {onContinue} />
+		{:else if selectedStep === 'whoareyou'}
+			<UserStep bind:username={oobeState.administrator} {onBack} {onContinue} />
+		{:else if selectedStep === 'password'}
+			<PasswordStep bind:password {onBack} {onContinue} />
+		{:else if selectedStep === 'internet'}
+			<InternetStep
+				bind:interfaces={oobeState.networkInterfaces}
+				bind:networkConfig
+				apply={networkApply}
+				onWifiScan={scanWifi}
+				onWifiConnect={connectWifi}
+				onCheck={checkNetwork}
+				{onBack}
+				{onContinue}
+			/>
+		{:else if selectedStep === 'updates'}
+			<UpdatesStep bind:policy={oobeState.updatePolicy} {onBack} {onContinue} />
+		{:else if selectedStep === 'remote-access'}
+			<RemoteAccessStep bind:form={remoteAccessForm} {onBack} {onContinue} />
+		{:else if selectedStep === 'ssh-key'}
+			<SshKeyStep bind:value={oobeState.sshPublicKey} {onBack} {onContinue} />
+		{:else if selectedStep === 'dashboard'}
+			<DashboardStep bind:form={accessForm} {ipAddresses} {onBack} {onContinue} />
+		{:else}
+			<CompleteStep
+				{onBack}
+				{onContinue}
+				{onReboot}
+				{onShutdown}
+				hostname={oobeState.hostname}
+				administrator={oobeState.administrator}
+				access={oobeState.access}
+				updatePolicy={oobeState.updatePolicy}
+				remoteAccess={oobeState.remoteAccess}
+				{finished}
+			/>
+		{/if}
+	</Shell>
 {/if}
-
-<style>
-	.loading-screen {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		height: 100vh;
-	}
-	.global-error {
-		position: fixed;
-		top: 1rem;
-		left: 50%;
-		transform: translateX(-50%);
-		background: #b91c1c;
-		color: white;
-		padding: 0.75rem 1rem;
-		border-radius: 0.5rem;
-		z-index: 100;
-		display: flex;
-		gap: 0.75rem;
-		align-items: center;
-	}
-	.global-error button {
-		background: white;
-		color: #b91c1c;
-		border: none;
-		padding: 0.25rem 0.5rem;
-		border-radius: 0.25rem;
-		cursor: pointer;
-	}
-	.redirect-overlay {
-		position: fixed;
-		inset: 0;
-		z-index: 200;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 0.5rem;
-		background: var(--background);
-		color: var(--foreground);
-	}
-	.redirect-title {
-		font-size: 1.25rem;
-		font-weight: 600;
-		margin: 0;
-	}
-	.redirect-sub {
-		color: var(--muted-foreground);
-		font-size: 0.9rem;
-		margin: 0;
-	}
-</style>

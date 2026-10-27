@@ -1,6 +1,6 @@
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 
-const catalogSources = import.meta.glob('./locales/*/oobe.ftl', {
+const catalogSources = import.meta.glob('../../../po/*/server-oobe.ftl', {
 	eager: true,
 	query: '?raw',
 	import: 'default'
@@ -15,7 +15,11 @@ for (const [path, source] of Object.entries(catalogSources)) {
 	catalogs.set(locale, bundle);
 }
 
-export const localeState = $state({ value: 'en-US' });
+export const availableLocales = [...catalogs.keys()].sort();
+
+export const localeState = $state({
+	value: catalogs.has('en-US') ? 'en-US' : (availableLocales[0] ?? 'en-US')
+});
 
 export function setLocale(locale: string) {
 	if (catalogs.has(locale)) localeState.value = locale;

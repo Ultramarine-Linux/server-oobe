@@ -1,38 +1,94 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { loadState, saveState, DEFAULT_OOBE_PORT } from '$lib/server/state';
-import { access, readFile, writeFile, mkdir } from 'node:fs/promises';
-import { constants } from 'node:fs';
-import { env } from 'node:process';
-import { setTimeout as delay } from 'node:timers/promises';
+import { isIP } from 'node:net';
+import { spawn } from 'node:child_process';
+import { loadState, saveState } from '$lib/server/state';
+import { validateWithLibtaidan } from '$lib/server/libtaidan';
+import { applyChange, CHANGE_ID_PATTERN } from '$lib/server/network-change';
+import { checkNetwork } from '$lib/server/network-check';
+import { validateNetworkConfig } from '$lib/server/network-config';
+import { INTERFACE_TYPES } from '$lib/network-config';
+import { SETUP_SESSION_COOKIE } from '$lib/server/setup-session';
 import {
+	tetraClient,
+	TetraError,
+	tetraAddAdmin,
+	tetraCloudflaredSetToken,
+	tetraCreateUser,
+	tetraNetworkConfigure,
+	tetraNetworkConnectWifi,
+	tetraNetworkInterfaces,
+	tetraNetworkScanWifi,
+	tetraPower,
+	tetraRemoteAccessStatus,
+	tetraSetAuthorizedKeys,
 	tetraSetHostname,
-	tetraNetworkStatus,
-	tetraServiceStatus,
-	tetraServiceStart,
-	tetraServiceEnable,
-	tetraCapabilities
+	tetraSetKeymap,
+	tetraSetPassword,
+	tetraSetUpdatePolicy,
+	tetraTailscaleUp,
+	type AccessRequest,
+	type TetraResponse
 } from '$lib/server/tetra';
-import { execFile, spawn } from 'node:child_process';
-import { promisify } from 'node:util';
-import type { StepId, OperationResult } from '$lib/oobe-state';
+import { validateDnsCredentials } from '$lib/dns-providers';
+import { validateEap8021x } from '$lib/eap-8021x';
+import type {
+	NetworkInterface,
+	OperationResult,
+	StepId,
+	WifiSecurityProfile
+} from '$lib/oobe-state';
 
-const execFileAsync = promisify(execFile);
+// Every operation that changes the host is a Tetra call made with the
+// caller's setup session token. The OOBE runs unprivileged and changes
+// nothing on the host itself.
+const ALLOWED_OPERATIONS = new Set([
+	'state.patch',
+	'state.reset',
+	'hostname.apply',
+	'keyboard.apply',
+	'user.create',
+	'password.set',
+	'network.interfaces',
+	'network.scan_wifi',
+	'network.connect_wifi',
+	'network.configure',
+	'network.check',
+	'ssh-key.apply',
+	'updates.set_policy',
+	'remote_access.status',
+	'remote_access.tailscale_up',
+	'remote_access.cloudflared_set_token',
+	'access.set',
+	'system.reboot',
+	'system.poweroff',
+	'setup.complete'
+]);
 
-function chpasswd(user: string, password: string): Promise<void> {
+const FIXTURE_MODE = process.env.OOBE_FIXTURE_MODE === 'true';
+
+const HOSTNAME_PATTERN =
+	/^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?)*$/;
+const DOMAIN_PATTERN = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+const SSH_KEY_PATTERN = /^(ssh-(rsa|ed25519|dss)|ecdsa-sha2-nistp\d+|sk-ssh-)[^\s]+\s+[^\s]+/;
+
+function hashPassword(password: string): Promise<string> {
 	return new Promise((resolve, reject) => {
-		const child = spawn('chpasswd', [], { stdio: ['pipe', 'pipe', 'pipe'] });
+		// The password is sent only on stdin. Tetra receives the resulting crypt
+		// hash through its typed users.set_password operation, never plaintext.
+		const child = spawn('openssl', ['passwd', '-6', '-stdin'], {
+			stdio: ['pipe', 'pipe', 'pipe']
+		});
+		let stdout = '';
 		let stderr = '';
-		child.stderr.on('data', (data) => {
-			stderr += data.toString();
-		});
-		child.on('error', (err) => reject(err));
+		child.stdout.on('data', (data) => (stdout += data.toString()));
+		child.stderr.on('data', (data) => (stderr += data.toString()));
+		child.on('error', reject);
 		child.on('close', (code) => {
-			if (code !== 0) reject(new Error(stderr || `chpasswd exited ${code}`));
-			else resolve();
+			if (code !== 0) reject(new Error(stderr || `password hashing exited ${code}`));
+			else resolve(stdout.trim());
 		});
-		child.stdin.write(`${user}:${password}\n`);
-		child.stdin.end();
+		child.stdin.end(`${password}\n`);
 	});
 }
 
@@ -52,192 +108,173 @@ function result(
 	return { id, step, status, retryable, message };
 }
 
-const FIXTURE_MODE = process.env.OOBE_FIXTURE_MODE === 'true';
+/** Validate Wi-Fi security into Tetra's `security` object, or return an error message. */
+function wifiSecurity(security: unknown): WifiSecurityProfile | string {
+	if (!security || typeof security !== 'object') return 'Wi-Fi security profile is required';
+	const profile = security as Record<string, unknown>;
+	if (profile.type === 'open') return { type: 'open' };
+	if (profile.type === 'wpa-personal') {
+		if (typeof profile.password !== 'string' || !profile.password)
+			return 'Wi-Fi password is required';
+		return { type: 'wpa-personal', password: profile.password };
+	}
+	if (profile.type === 'wpa-enterprise') {
+		const settings = validateEap8021x(profile, ['type']);
+		return typeof settings === 'string' ? settings : { type: 'wpa-enterprise', ...settings };
+	}
+	return 'Unsupported Wi-Fi security type';
+}
 
-export const POST: RequestHandler = async ({ request }) => {
+/** Tetra's `network.interfaces` entries without loopback, keeping the fields the OOBE shows. */
+function networkInterfaces(value: unknown): NetworkInterface[] {
+	return (Array.isArray(value) ? value : [])
+		.filter((entry) => typeof entry?.name === 'string' && entry.name !== 'lo')
+		.map((entry) => ({
+			name: entry.name,
+			type: INTERFACE_TYPES.includes(entry.type) ? entry.type : undefined,
+			operstate: typeof entry.operstate === 'string' ? entry.operstate : undefined,
+			addresses: (Array.isArray(entry.addresses) ? entry.addresses : []).filter(
+				(address: Record<string, unknown>) =>
+					(address?.family === 'ipv4' || address?.family === 'ipv6') &&
+					typeof address.address === 'string'
+			)
+		}));
+}
+
+/** The change id the browser chose for a safe-apply change; see network-change.ts. */
+function changeId(payload: Record<string, unknown>): string | undefined {
+	return typeof payload.changeId === 'string' && CHANGE_ID_PATTERN.test(payload.changeId)
+		? payload.changeId
+		: undefined;
+}
+
+/** The result of a safe-apply change; the browser confirms it through /api/oobe/network/confirm. */
+function changeResult(resp: TetraResponse): string {
+	const payload = resp.payload ?? {};
+	return JSON.stringify({
+		confirmationRequired: payload.confirmation_required === true,
+		rollbackInSeconds:
+			typeof payload.rollback_in_seconds === 'number' ? payload.rollback_in_seconds : undefined
+	});
+}
+
+/** Validate an access.set payload into Tetra's request. Returns an error message on failure. */
+function accessRequest(payload: Record<string, unknown>): AccessRequest | string {
+	const hostname = typeof payload.hostname === 'string' ? payload.hostname.trim() : '';
+	if (payload.mode === 'ip') {
+		const address = hostname.replace(/^\[|\]$/g, '');
+		if (isIP(address) === 0) return 'Enter an IP address of this server';
+		return { mode: 'ip', hostname: address };
+	}
+	if (payload.mode !== 'domain') return 'Access mode must be domain or ip';
+	const domain = hostname.toLowerCase().replace(/\.$/, '');
+	if (!DOMAIN_PATTERN.test(domain)) return 'Enter a fully qualified domain name';
+	if (payload.challenge === 'http-01')
+		return { mode: 'domain', hostname: domain, challenge: 'http-01' };
+	if (payload.challenge !== 'dns-01') return 'Certificate challenge must be http-01 or dns-01';
+	const provider = typeof payload.dns_provider === 'string' ? payload.dns_provider : '';
+	const credentialError = validateDnsCredentials(provider, payload.dns_credentials);
+	if (credentialError) return credentialError;
+	const credentials = Object.fromEntries(
+		Object.entries(payload.dns_credentials as Record<string, string>)
+			.map(([key, value]) => [key, value.trim()])
+			.filter(([, value]) => value)
+	);
+	return {
+		mode: 'domain',
+		hostname: domain,
+		challenge: 'dns-01',
+		dns_provider: provider,
+		dns_credentials: credentials
+	};
+}
+
+/** A single-line secret (auth key, tunnel token) with no whitespace. */
+function secretValue(value: unknown, maxLength = 4096): string | undefined {
+	if (typeof value !== 'string') return undefined;
+	const trimmed = value.trim();
+	return trimmed && trimmed.length <= maxLength && !/\s/.test(trimmed) ? trimmed : undefined;
+}
+
+export const POST: RequestHandler = async ({ request, locals, cookies }) => {
+	// hooks.server.ts rejects requests without a live Tetra setup session.
+	const token = locals.setupToken;
+	if (!token) throw error(401, 'Setup session required');
 	try {
 		const body = (await request.json()) as OperationRequest;
 		const { step, operation, payload = {} } = body;
 		const opId = `op-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+		if (!step || !ALLOWED_OPERATIONS.has(operation)) {
+			return json(result(opId, step, 'failed', false, 'Unsupported setup operation'));
+		}
+		try {
+			await validateWithLibtaidan(step, operation, payload);
+		} catch (e) {
+			return json(
+				result(
+					opId,
+					step,
+					'failed',
+					true,
+					e instanceof Error ? e.message : 'libtaidan validation failed'
+				)
+			);
+		}
+
+		/** Map a Tetra module response to an operation result. */
+		const fromTetra = (resp: TetraResponse, failure: string, message?: string) =>
+			json(
+				resp.ok
+					? result(opId, step, 'succeeded', false, message)
+					: result(opId, step, 'failed', true, resp.error || failure)
+			);
 
 		const state = await loadState();
 
-		if (operation === 'state.patch') {
-			const patch = payload as Partial<typeof state>;
-			if (patch.activeStep !== undefined) state.activeStep = patch.activeStep;
-			if (patch.completed !== undefined) state.completed = patch.completed;
-			if (patch.hostname !== undefined) state.hostname = patch.hostname;
-			if (patch.administrator !== undefined) state.administrator = patch.administrator;
-			if (patch.keyboardLayout !== undefined) state.keyboardLayout = patch.keyboardLayout;
-			if (patch.hostingChoice !== undefined) state.hostingChoice = patch.hostingChoice;
-			if (patch.steps !== undefined) {
-				state.steps = state.steps.map((current) => {
-					const update = patch.steps?.find((candidate) => candidate.id === current.id);
-					return update ? { ...current, status: update.status } : current;
-				});
-			}
-			await saveState(state);
-			return json(result(opId, step, 'succeeded', false));
-		}
-
-		if (FIXTURE_MODE) {
-			// Fixture mode: accept any operation, update state where applicable, return success.
-			switch (operation) {
-				case 'state.reset':
-					state.activeStep = 'welcome';
-					state.completed = false;
-					state.steps = state.steps.map((step) => ({ ...step, status: 'pending' }));
-					await saveState(state);
-					return json(result(opId, step, 'succeeded', false));
-				case 'hostname.apply':
-					state.hostname = payload.hostname as string;
-					await saveState(state);
-					return json(result(opId, step, 'succeeded', false));
-				case 'keyboard.apply':
-					return json(result(opId, step, 'succeeded', false));
-				case 'user.create':
-					state.administrator = payload.name as string;
-					await saveState(state);
-					return json(result(opId, step, 'succeeded', false));
-				case 'password.set':
-					return json(result(opId, step, 'succeeded', false));
-				case 'network.check':
-					return json(result(opId, step, 'succeeded', false, 'Network is available'));
-				case 'tetra.start':
-					state.tetra.installed = true;
-					state.tetra.running = true;
-					await saveState(state);
-					return json(result(opId, step, 'succeeded', false));
-				case 'tweaks.apply':
-					return json(result(opId, step, 'succeeded', false));
-				case 'dashboard.install':
-					state.dashboard.installed = true;
-					state.dashboard.installing = false;
-					await saveState(state);
-					return json(result(opId, step, 'succeeded', false, 'Dashboard service installed'));
-				case 'dashboard.handoff':
-					return json(result(opId, step, 'succeeded', false, 'Handoff scheduled'));
-				case 'cloudflare.install':
-					state.cloudflare.installed = true;
-					state.cloudflare.installing = false;
-					await saveState(state);
-					return json(result(opId, step, 'succeeded', false, 'Cloudflared installed'));
-				case 'fyra.begin':
-					state.fyra.status = 'pending';
-					await saveState(state);
-					return json(result(opId, step, 'succeeded', false, 'Fyra authorization started'));
-				default:
-					return json(result(opId, step, 'succeeded', false, `Fixture mode: ${operation}`));
-			}
-		}
-
 		switch (operation) {
+			case 'state.patch': {
+				// Only UI progress. Settings Tetra applies are recorded by their own
+				// operations once Tetra accepts them.
+				const patch = payload as Partial<typeof state>;
+				if (patch.activeStep !== undefined) state.activeStep = patch.activeStep;
+				if (patch.completed !== undefined) state.completed = patch.completed;
+				if (patch.hostname !== undefined) state.hostname = patch.hostname;
+				if (patch.administrator !== undefined) state.administrator = patch.administrator;
+				if (patch.keyboardLayout !== undefined) state.keyboardLayout = patch.keyboardLayout;
+				if (patch.keyboardVariant !== undefined) state.keyboardVariant = patch.keyboardVariant;
+				if (patch.networkInterfaces !== undefined)
+					state.networkInterfaces = patch.networkInterfaces;
+				if (patch.steps !== undefined) {
+					state.steps = state.steps.map((current) => {
+						const update = patch.steps?.find((candidate) => candidate.id === current.id);
+						return update ? { ...current, status: update.status } : current;
+					});
+				}
+				await saveState(state);
+				return json(result(opId, step, 'succeeded', false));
+			}
+
+			case 'state.reset': {
+				// Development and tests only.
+				if (!FIXTURE_MODE) return json(result(opId, step, 'failed', false, 'Not available'));
+				state.activeStep = 'welcome';
+				state.completed = false;
+				state.steps = state.steps.map((current) => ({ ...current, status: 'pending' }));
+				await saveState(state);
+				return json(result(opId, step, 'succeeded', false));
+			}
+
 			case 'hostname.apply': {
 				const hostname = payload.hostname as string;
-				if (
-					!hostname ||
-					!/^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?)*$/.test(
-						hostname
-					)
-				) {
+				if (!hostname || !HOSTNAME_PATTERN.test(hostname)) {
 					return json(result(opId, step, 'failed', true, 'Invalid hostname'));
 				}
-				let resp: Awaited<ReturnType<typeof tetraSetHostname>>;
-				try {
-					resp = await tetraSetHostname(hostname);
-				} catch (e: any) {
-					return json(result(opId, step, 'failed', true, e.message || 'Failed to set hostname'));
+				const resp = await tetraSetHostname(token, hostname);
+				if (resp.ok) {
+					state.hostname = hostname;
+					await saveState(state);
 				}
-				if (!resp.ok) {
-					return json(result(opId, step, 'failed', true, resp.error || 'Failed to set hostname'));
-				}
-				state.hostname = hostname;
-				await saveState(state);
-				return json(result(opId, step, 'succeeded', false));
-			}
-
-			case 'network.check': {
-				let resp: Awaited<ReturnType<typeof tetraNetworkStatus>>;
-				try {
-					resp = await tetraNetworkStatus();
-				} catch (e: any) {
-					return json(result(opId, step, 'failed', true, e.message || 'Network check failed'));
-				}
-				if (!resp.ok) {
-					return json(result(opId, step, 'failed', true, resp.error || 'Network check failed'));
-				}
-				return json(result(opId, step, 'succeeded', false, 'Network is available'));
-			}
-
-			case 'user.create': {
-				const name = payload.name as string;
-				if (!name || !/^[a-z_][a-z0-9_-]*$/.test(name)) {
-					return json(result(opId, step, 'failed', true, 'Invalid username'));
-				}
-				try {
-					await execFileAsync('useradd', ['-m', '-G', 'wheel', name]);
-				} catch (e: any) {
-					return json(
-						result(opId, step, 'failed', true, e.stderr || e.message || 'Failed to create user')
-					);
-				}
-				state.administrator = name;
-				await saveState(state);
-				return json(result(opId, step, 'succeeded', false));
-			}
-
-			case 'password.set': {
-				const name = payload.name as string;
-				const plaintext = payload.password as string;
-				if (!name || !plaintext) {
-					return json(result(opId, step, 'failed', true, 'Missing user or password'));
-				}
-				try {
-					await chpasswd(name, plaintext);
-				} catch (e: any) {
-					return json(
-						result(opId, step, 'failed', true, e.stderr || e.message || 'Failed to set password')
-					);
-				}
-				return json(result(opId, step, 'succeeded', false));
-			}
-
-			case 'tetra.detect': {
-				const resp = await tetraCapabilities();
-				const installed = !resp.error;
-				state.tetra.installed = installed;
-				if (installed) {
-					const svc = await tetraServiceStatus('tetra.service');
-					state.tetra.running = svc.ok && !svc.error;
-				}
-				await saveState(state);
-				return json(
-					result(
-						opId,
-						step,
-						'succeeded',
-						false,
-						installed ? 'Tetra detected' : 'Tetra not installed'
-					)
-				);
-			}
-
-			case 'tetra.start': {
-				const startResp = await tetraServiceStart('tetra.service');
-				if (!startResp.ok) {
-					return json(
-						result(opId, step, 'failed', true, startResp.error || 'Failed to start Tetra')
-					);
-				}
-				const enableResp = await tetraServiceEnable('tetra.service');
-				if (!enableResp.ok) {
-					return json(
-						result(opId, step, 'failed', true, enableResp.error || 'Failed to enable Tetra')
-					);
-				}
-				state.tetra.running = true;
-				await saveState(state);
-				return json(result(opId, step, 'succeeded', false));
+				return fromTetra(resp, 'Failed to set hostname');
 			}
 
 			case 'keyboard.apply': {
@@ -249,318 +286,253 @@ export const POST: RequestHandler = async ({ request }) => {
 				if (variant && !/^[a-zA-Z0-9_-]+$/.test(variant)) {
 					return json(result(opId, step, 'failed', true, 'Invalid keyboard variant'));
 				}
-				try {
-					const args = variant ? [layout, variant] : [layout];
-					await execFileAsync('localectl', ['set-keymap', ...args]);
-					return json(result(opId, step, 'succeeded', false));
-				} catch (e: any) {
-					return json(
-						result(opId, step, 'failed', true, e.stderr || e.message || 'Keyboard setup failed')
-					);
+				const resp = await tetraSetKeymap(token, layout, variant || undefined);
+				if (resp.ok) {
+					state.keyboardLayout = layout;
+					state.keyboardVariant = variant || undefined;
+					await saveState(state);
 				}
+				return fromTetra(resp, 'Keyboard setup failed');
 			}
 
-			case 'tweaks.apply': {
-				const defaults = payload.defaults as boolean | undefined;
-				const autoUpdates = payload.automaticUpdates as boolean | undefined;
-				try {
-					if (defaults) {
-						await execFileAsync('systemctl', ['enable', '--now', 'sshd']);
-					}
-					if (autoUpdates) {
-						await execFileAsync('systemctl', ['enable', '--now', 'dnf-automatic.timer']);
-					}
-					return json(result(opId, step, 'succeeded', false));
-				} catch (e: any) {
-					return json(
-						result(opId, step, 'failed', true, e.stderr || e.message || 'Tweaks apply failed')
-					);
+			case 'user.create': {
+				const name = payload.name as string;
+				if (!name || !/^[a-z_][a-z0-9_-]*$/.test(name)) {
+					return json(result(opId, step, 'failed', true, 'Invalid username'));
 				}
+				// Every host change goes through Tetra. If Tetra cannot create the
+				// account, the step fails; there is no local fallback.
+				const created = await tetraCreateUser(token, name);
+				if (!created.ok) return fromTetra(created, 'Tetra could not create user');
+				// setup.complete requires an eligible administrator.
+				const admin = await tetraAddAdmin(token, name);
+				if (!admin.ok) return fromTetra(admin, 'Tetra could not make the user an administrator');
+				state.administrator = name;
+				await saveState(state);
+				return json(result(opId, step, 'succeeded', false));
 			}
 
-			case 'fyra.begin': {
-				const dashboardUrl =
-					typeof payload.dashboardUrl === 'string' ? payload.dashboardUrl.trim() : '';
-				const agentUrl = typeof payload.agentUrl === 'string' ? payload.agentUrl.trim() : '';
-				if (!dashboardUrl) {
-					return json(result(opId, step, 'failed', true, 'Dashboard URL is required'));
+			case 'password.set': {
+				const name = payload.name as string;
+				const plaintext = payload.password as string;
+				if (!name || !plaintext) {
+					return json(result(opId, step, 'failed', true, 'Missing user or password'));
 				}
+				let passwordHash: string;
 				try {
-					const dashboard = new URL(dashboardUrl);
-					if (!['http:', 'https:'].includes(dashboard.protocol))
-						throw new Error('Dashboard URL must use HTTP or HTTPS');
-					if (agentUrl && !/^wss?:\/\//.test(agentUrl))
-						throw new Error('Agent URL must use ws:// or wss://');
+					passwordHash = await hashPassword(plaintext);
 				} catch (e) {
 					return json(
-						result(
-							opId,
-							step,
-							'failed',
-							true,
-							e instanceof Error ? e.message : 'Invalid enrollment URL'
-						)
+						result(opId, step, 'failed', true, e instanceof Error ? e.message : 'Hashing failed')
 					);
 				}
-				const approvalFile = `/run/ultramarine-server-oobe/tetra-enrollment-${opId}.json`;
-				try {
-					await mkdir('/run/ultramarine-server-oobe', { recursive: true, mode: 0o700 });
-					const args = ['enroll', '--dashboard-url', dashboardUrl, '--approval-file', approvalFile];
-					if (agentUrl) args.push('--agent-url', agentUrl);
-					const child = spawn(env.TETRA_PATH || '/usr/bin/tetra', args, {
-						detached: true,
-						stdio: 'ignore'
-					});
-					child.unref();
-				} catch (e) {
-					return json(
-						result(
-							opId,
-							step,
-							'failed',
-							true,
-							e instanceof Error ? e.message : 'Failed to start Tetra enrollment'
-						)
-					);
-				}
-				let approval: { verification_uri?: string; user_code?: string } | undefined;
-				for (let attempt = 0; attempt < 20; attempt += 1) {
-					try {
-						approval = JSON.parse(await readFile(approvalFile, 'utf8')) as typeof approval;
-						break;
-					} catch {
-						await delay(250);
-					}
-				}
-				state.fyra.status = 'pending';
-				state.fyra.verificationUri = approval ? approval.verification_uri : undefined;
-				state.fyra.userCode = approval ? approval.user_code : undefined;
-				state.fyra.message = approval
-					? 'Open the verification URL and approve this host.'
-					: `Enrollment started. Approval details are in ${approvalFile}.`;
-				await saveState(state);
-				return json(result(opId, step, 'succeeded', true, state.fyra.message));
-			}
-
-			case 'system.reboot': {
-				try {
-					await execFileAsync('systemctl', ['reboot']);
-					return json(result(opId, step, 'succeeded', false, 'Rebooting…'));
-				} catch (e: any) {
-					return json(
-						result(opId, step, 'failed', true, e.stderr || e.message || 'Failed to reboot')
-					);
-				}
-			}
-
-			case 'system.poweroff': {
-				try {
-					await execFileAsync('systemctl', ['poweroff']);
-					return json(result(opId, step, 'succeeded', false, 'Shutting down…'));
-				} catch (e: any) {
-					return json(
-						result(opId, step, 'failed', true, e.stderr || e.message || 'Failed to shut down')
-					);
-				}
-			}
-
-			case 'dashboard.install': {
-				const buildPath =
-					env.DASHBOARD_BUILD_PATH || '/usr/lib/ultramarine-dashboard/apps/dashboard/build';
-				const serviceName = env.DASHBOARD_SERVICE_NAME || 'ultramarine-dashboard.service';
-
-				try {
-					await access(buildPath, constants.R_OK);
-				} catch {
-					return json(
-						result(opId, step, 'failed', true, `Dashboard build not found at ${buildPath}`)
-					);
-				}
-
-				const unitPath = `/etc/systemd/system/${serviceName}`;
-				const unitContent = `[Unit]
-Description=Ultramarine Server Dashboard
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-WorkingDirectory=${buildPath}
-ExecStart=/usr/bin/node ${buildPath}
-Restart=on-failure
-Environment="PORT=3972"
-Environment="ORIGIN=http://localhost:3972"
-Environment="HOST=0.0.0.0"
-
-[Install]
-WantedBy=multi-user.target
-`;
-
-				try {
-					await writeFile(unitPath, unitContent, 'utf-8');
-					await execFileAsync('systemctl', ['daemon-reload']);
-					await execFileAsync('systemctl', ['enable', serviceName]);
-				} catch (e: any) {
-					return json(
-						result(
-							opId,
-							step,
-							'failed',
-							true,
-							e.stderr || e.message || 'Failed to install dashboard service'
-						)
-					);
-				}
-
-				if (!state.dashboard) {
-					state.dashboard = { installed: false, installing: false };
-				}
-				state.dashboard.installed = true;
-				state.dashboard.installing = false;
-				await saveState(state);
-				return json(result(opId, step, 'succeeded', false, 'Dashboard service installed'));
-			}
-
-			case 'dashboard.handoff': {
-				const oobeService = env.OOBE_SERVICE_NAME || 'ultramarine-server-oobe.service';
-				const dashboardService = env.DASHBOARD_SERVICE_NAME || 'ultramarine-dashboard.service';
-
-				const scriptPath = `/tmp/ultramarine-dashboard-handoff-${Date.now()}.sh`;
-				const script = `#!/bin/sh
-set -e
-sleep 3
-systemctl stop ${oobeService} 2>/dev/null || true
-systemctl start ${dashboardService}
-rm -f ${scriptPath}
-`;
-
-				try {
-					await writeFile(scriptPath, script, { mode: 0o755 });
-					const child = spawn('sh', [scriptPath], {
-						detached: true,
-						stdio: 'ignore'
-					});
-					child.unref();
-				} catch (e: any) {
-					return json(
-						result(opId, step, 'failed', true, e.message || 'Failed to schedule handoff')
-					);
-				}
-
-				return json(result(opId, step, 'succeeded', false, 'Handoff scheduled'));
-			}
-
-			case 'cloudflare.install': {
-				const cloudflaredBin = env.CLOUDFLARED_PATH || '/usr/bin/cloudflared';
-				const serviceName = env.CLOUDFLARED_SERVICE_NAME || 'ultramarine-cloudflared.service';
-				const tokenDir = env.CLOUDFLARED_TOKEN_DIR || '/var/lib/ultramarine/cloudflared';
-				const tokenFile = `${tokenDir}/token`;
-				const wrapperPath = '/usr/local/bin/ultramarine-cloudflared-wrapper.sh';
-
-				// Try to install cloudflared if not present
-				try {
-					await access(cloudflaredBin, constants.X_OK);
-				} catch {
-					try {
-						await execFileAsync('dnf', ['install', '-y', 'cloudflared']);
-					} catch {
-						// Fall back to official RPM install path
-						try {
-							await execFileAsync('dnf', [
-								'install',
-								'-y',
-								'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-x86_64.rpm'
-							]);
-						} catch (e: any) {
-							return json(
-								result(
-									opId,
-									step,
-									'failed',
-									true,
-									e.stderr || e.message || 'Failed to install cloudflared'
-								)
-							);
-						}
-					}
-				}
-
-				// Ensure token directory exists
-				try {
-					await mkdir(tokenDir, { recursive: true });
-				} catch {
-					// ignore
-				}
-
-				// Create wrapper script that reads token from file
-				const wrapperScript = `#!/bin/sh
-set -e
-if [ -r "${tokenFile}" ]; then
-  export TUNNEL_TOKEN=$(cat "${tokenFile}")
-fi
-exec ${cloudflaredBin} tunnel run
-`;
-				try {
-					await writeFile(wrapperPath, wrapperScript, { mode: 0o755 });
-				} catch (e: any) {
-					return json(
-						result(opId, step, 'failed', true, e.message || 'Failed to write wrapper script')
-					);
-				}
-
-				const unitPath = `/etc/systemd/system/${serviceName}`;
-				const unitContent = `[Unit]
-Description=Cloudflare Tunnel for Ultramarine Server
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=${wrapperPath}
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-`;
-
-				try {
-					await writeFile(unitPath, unitContent, 'utf-8');
-					await execFileAsync('systemctl', ['daemon-reload']);
-					await execFileAsync('systemctl', ['enable', serviceName]);
-				} catch (e: any) {
-					return json(
-						result(
-							opId,
-							step,
-							'failed',
-							true,
-							e.stderr || e.message || 'Failed to install cloudflared service'
-						)
-					);
-				}
-
-				if (!state.cloudflare) {
-					state.cloudflare = { installed: false, installing: false };
-				}
-				state.cloudflare.installed = true;
-				state.cloudflare.installing = false;
-				await saveState(state);
-				return json(
-					result(
-						opId,
-						step,
-						'succeeded',
-						false,
-						'Cloudflared installed. Place tunnel token in ' + tokenFile + ' and start the service.'
-					)
+				return fromTetra(
+					await tetraSetPassword(token, name, passwordHash),
+					'Tetra could not set password'
 				);
+			}
+
+			case 'ssh-key.apply': {
+				const publicKey = typeof payload.publicKey === 'string' ? payload.publicKey.trim() : '';
+				if (!SSH_KEY_PATTERN.test(publicKey) || publicKey.includes('\n')) {
+					return json(result(opId, step, 'failed', true, 'Invalid SSH public key'));
+				}
+				if (!state.administrator) {
+					return json(result(opId, step, 'failed', true, 'Create the administrator first'));
+				}
+				const resp = await tetraSetAuthorizedKeys(token, state.administrator, [publicKey]);
+				if (resp.ok) {
+					state.sshPublicKey = publicKey;
+					await saveState(state);
+				}
+				return fromTetra(resp, 'Failed to install SSH key');
+			}
+
+			case 'network.interfaces': {
+				const resp = await tetraNetworkInterfaces(token);
+				if (!resp.ok) return fromTetra(resp, 'Network query failed');
+				const interfaces = networkInterfaces(resp.payload?.interfaces);
+				state.networkInterfaces = interfaces;
+				await saveState(state);
+				return json(result(opId, step, 'succeeded', false, JSON.stringify(interfaces)));
+			}
+
+			case 'network.scan_wifi': {
+				const interfaceName = payload.interface as string;
+				if (!interfaceName || !/^[a-zA-Z0-9_.-]+$/.test(interfaceName)) {
+					return json(result(opId, step, 'failed', true, 'Invalid Wi-Fi interface'));
+				}
+				const resp = await tetraNetworkScanWifi(token, interfaceName);
+				if (!resp.ok) return fromTetra(resp, 'Wi-Fi scan failed');
+				const networks = Array.isArray(resp.payload?.networks) ? resp.payload.networks : [];
+				return json(result(opId, step, 'succeeded', false, JSON.stringify(networks)));
+			}
+
+			case 'network.connect_wifi': {
+				const { changeId: _, ...request } = payload;
+				const id = changeId(payload);
+				const interfaceName = request.interface as string;
+				const ssid = request.ssid as string;
+				if (!id) return json(result(opId, step, 'failed', true, 'Missing change id'));
+				if (!interfaceName || !/^[a-zA-Z0-9_.-]+$/.test(interfaceName) || !ssid) {
+					return json(result(opId, step, 'failed', true, 'Wi-Fi interface and SSID are required'));
+				}
+				const security = wifiSecurity(request.security);
+				if (typeof security === 'string') return json(result(opId, step, 'failed', true, security));
+				const resp = await applyChange(id, token, () =>
+					tetraNetworkConnectWifi(token, interfaceName, ssid, request.hidden === true, security)
+				);
+				if (!resp.ok) return fromTetra(resp, 'Wi-Fi connection failed');
+				return json(result(opId, step, 'succeeded', false, changeResult(resp)));
+			}
+
+			case 'network.configure': {
+				const { changeId: _, ...request } = payload;
+				const id = changeId(payload);
+				if (!id) return json(result(opId, step, 'failed', true, 'Missing change id'));
+				const config = validateNetworkConfig(request);
+				if (typeof config === 'string') return json(result(opId, step, 'failed', true, config));
+				const resp = await applyChange(id, token, () => tetraNetworkConfigure(token, config));
+				if (!resp.ok) return fromTetra(resp, 'Network configuration failed');
+				return json(result(opId, step, 'succeeded', false, changeResult(resp)));
+			}
+
+			case 'network.check': {
+				// Whether the host has an address others can reach, per family, and
+				// whether DNS works. Fixture mode does not resolve real names.
+				const resp = await tetraNetworkInterfaces(token);
+				if (!resp.ok) return fromTetra(resp, 'Network check failed');
+				const check = await checkNetwork(
+					resp.payload?.interfaces,
+					FIXTURE_MODE ? async () => true : undefined
+				);
+				return json(result(opId, step, 'succeeded', false, JSON.stringify(check)));
+			}
+
+			case 'updates.set_policy': {
+				const policy = payload.policy;
+				if (policy !== 'automatic' && policy !== 'notify') {
+					return json(result(opId, step, 'failed', true, 'Choose an update policy'));
+				}
+				const resp = await tetraSetUpdatePolicy(token, { policy });
+				if (resp.ok) {
+					state.updatePolicy = policy;
+					await saveState(state);
+				}
+				return fromTetra(resp, 'Failed to save the update policy');
+			}
+
+			case 'remote_access.status': {
+				const resp = await tetraRemoteAccessStatus(token);
+				if (!resp.ok) return fromTetra(resp, 'Failed to read remote access status');
+				return json(result(opId, step, 'succeeded', false, JSON.stringify(resp.status)));
+			}
+
+			case 'remote_access.tailscale_up': {
+				// The auth key goes straight to Tetra and is never stored.
+				const authKey = secretValue(payload.auth_key, 512);
+				if (!authKey || !authKey.startsWith('tskey-')) {
+					return json(result(opId, step, 'failed', true, 'Enter a Tailscale auth key (tskey-…)'));
+				}
+				const serve = payload.serve !== false;
+				const funnel = payload.funnel === true;
+				// Funnel publishes the dashboard on the internet; the user must
+				// have confirmed the warning.
+				if (funnel && payload.confirmFunnel !== true) {
+					return json(
+						result(opId, step, 'failed', true, 'Confirm that the dashboard will be public')
+					);
+				}
+				if (funnel && !serve) {
+					return json(result(opId, step, 'failed', true, 'Funnel requires Tailscale Serve'));
+				}
+				const resp = await tetraTailscaleUp(token, { auth_key: authKey, serve, funnel });
+				if (resp.ok) {
+					state.remoteAccess = {
+						...state.remoteAccess,
+						tailscale: true,
+						tailscaleServe: serve,
+						tailscaleFunnel: funnel
+					};
+					await saveState(state);
+				}
+				return fromTetra(resp, 'Failed to connect Tailscale');
+			}
+
+			case 'remote_access.cloudflared_set_token': {
+				// The tunnel token goes straight to Tetra and is never stored.
+				const tunnelToken = secretValue(payload.token);
+				if (!tunnelToken) {
+					return json(result(opId, step, 'failed', true, 'Enter a Cloudflare Tunnel token'));
+				}
+				const resp = await tetraCloudflaredSetToken(token, { token: tunnelToken });
+				if (resp.ok) {
+					state.remoteAccess = { ...state.remoteAccess, cloudflared: true };
+					await saveState(state);
+				}
+				return fromTetra(resp, 'Failed to configure Cloudflare Tunnel');
+			}
+
+			case 'access.set': {
+				const access = accessRequest(payload);
+				if (typeof access === 'string') return json(result(opId, step, 'failed', true, access));
+				try {
+					const applied = await tetraClient().setAccess(token, access);
+					// DNS provider credentials are deliberately left out.
+					state.access = {
+						mode: access.mode,
+						hostname: access.hostname,
+						challenge: access.mode === 'domain' ? access.challenge : 'http-01',
+						dnsProvider:
+							access.mode === 'domain' && access.challenge === 'dns-01'
+								? access.dns_provider
+								: undefined,
+						applied: true,
+						passkeysAvailable: applied.passkeysAvailable
+					};
+					await saveState(state);
+					return json(result(opId, step, 'succeeded', false, JSON.stringify(applied)));
+				} catch (e) {
+					if (!(e instanceof TetraError)) throw e;
+					return json(result(opId, step, 'failed', true, e.message));
+				}
+			}
+
+			case 'system.reboot':
+				return fromTetra(await tetraPower(token, 'reboot'), 'Failed to reboot', 'Rebooting…');
+
+			case 'system.poweroff':
+				return fromTetra(
+					await tetraPower(token, 'poweroff'),
+					'Failed to shut down',
+					'Shutting down…'
+				);
+
+			case 'setup.complete': {
+				// Tetra disables the setup code, ends every setup session (this one
+				// included), starts the dashboard and stops the OOBE shortly after.
+				// It refuses while no eligible administrator exists.
+				try {
+					const completed = await tetraClient().completeSetup(token);
+					state.completed = true;
+					await saveState(state);
+					cookies.delete(SETUP_SESSION_COOKIE, { path: '/' });
+					return json(result(opId, step, 'succeeded', false, JSON.stringify(completed)));
+				} catch (e) {
+					if (!(e instanceof TetraError)) throw e;
+					const message =
+						e.code === 'setup_incomplete'
+							? 'Create an administrator account before finishing setup'
+							: e.message;
+					return json(result(opId, step, 'failed', e.code !== 'setup_complete', message));
+				}
 			}
 
 			default:
 				return json(result(opId, step, 'failed', false, `Unknown operation: ${operation}`));
 		}
 	} catch (err) {
-		console.error('Operation failed:', err);
+		console.error('Operation failed:', err instanceof Error ? err.message : 'unknown error');
 		throw error(500, 'Internal server error');
 	}
 };

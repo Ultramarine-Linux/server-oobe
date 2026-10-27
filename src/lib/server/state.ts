@@ -2,9 +2,18 @@ import { readFile, writeFile, mkdir, access } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { dirname } from 'node:path';
 import { tmpdir } from 'node:os';
-import { fixtureSteps, type OobeState, type StepId } from '$lib/oobe-state';
+import {
+	defaultAccess,
+	defaultRemoteAccess,
+	fixtureSteps,
+	type OobeState,
+	type StepId
+} from '$lib/oobe-state';
 
-/** Canonical local port for the Ultramarine Server OOBE web service. */
+/**
+ * Port browsers use to reach the OOBE. Tetra serves it through Caddy with
+ * `tls internal`; Node itself listens only on 127.0.0.1:6624.
+ */
 export const DEFAULT_OOBE_PORT = 6623;
 
 const DEFAULT_STATE_PATH = '/var/lib/ultramarine-server-oobe/state.json';
@@ -43,11 +52,12 @@ function normalizeState(raw: unknown): OobeState {
 		hostname: partial.hostname ?? '',
 		administrator: partial.administrator ?? '',
 		keyboardLayout: partial.keyboardLayout,
-		hostingChoice: partial.hostingChoice ?? null,
-		tetra: { ...base.tetra, ...partial.tetra },
-		fyra: { ...base.fyra, ...partial.fyra },
-		dashboard: { ...base.dashboard, ...partial.dashboard },
-		cloudflare: { ...base.cloudflare, ...partial.cloudflare }
+		keyboardVariant: partial.keyboardVariant,
+		updatePolicy: partial.updatePolicy === 'notify' ? 'notify' : 'automatic',
+		sshPublicKey: partial.sshPublicKey ?? '',
+		networkInterfaces: partial.networkInterfaces ?? [],
+		access: { ...defaultAccess, ...partial.access },
+		remoteAccess: { ...defaultRemoteAccess, ...partial.remoteAccess }
 	};
 }
 
@@ -59,11 +69,12 @@ function defaultState(): OobeState {
 		steps: fixtureSteps.map((f) => ({ ...f })),
 		hostname: '',
 		administrator: '',
-		hostingChoice: null,
-		tetra: { installed: false, running: false, paired: false },
-		fyra: { status: 'not-started' },
-		dashboard: { installed: false, installing: false },
-		cloudflare: { installed: false, installing: false }
+		keyboardVariant: undefined,
+		updatePolicy: 'automatic',
+		sshPublicKey: '',
+		networkInterfaces: [],
+		access: { ...defaultAccess },
+		remoteAccess: { ...defaultRemoteAccess }
 	};
 }
 

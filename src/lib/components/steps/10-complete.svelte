@@ -1,7 +1,13 @@
 <script lang="ts">
+	import Callout from '$lib/components/Callout.svelte';
 	import StepLayout from '$lib/components/StepLayout.svelte';
 	import { t } from '$lib/i18n.svelte';
-	import type { HostingChoice } from '$lib/oobe-state';
+	import type {
+		AccessState,
+		RemoteAccessState,
+		SetupCompleteResult,
+		UpdatePolicy
+	} from '$lib/oobe-state';
 	let {
 		onBack,
 		onContinue,
@@ -9,7 +15,10 @@
 		onShutdown,
 		hostname = 'ultramarine-server',
 		administrator = 'Not configured',
-		hostingChoice
+		access,
+		updatePolicy,
+		remoteAccess,
+		finished = null
 	}: {
 		onBack: () => void;
 		onContinue: () => void;
@@ -17,56 +26,118 @@
 		onShutdown: () => void;
 		hostname?: string;
 		administrator?: string;
-		hostingChoice?: HostingChoice | null;
+		access: AccessState;
+		updatePolicy: UpdatePolicy;
+		remoteAccess: RemoteAccessState;
+		/** The setup.complete response, once setup has finished. */
+		finished?: SetupCompleteResult | null;
 	} = $props();
 
-	function hostingLabel(choice: HostingChoice | null | undefined): string {
-		switch (choice) {
-			case 'global':
-				return t('complete-hosting-global');
-			case 'local':
-				return t('complete-hosting-local');
-			case 'both':
-				return t('complete-hosting-both');
-			default:
-				return t('complete-dashboard-value');
-		}
-	}
-
-	let continueKey = $derived(
-		hostingChoice === 'local' || hostingChoice === 'both' ? 'go-to-dashboard' : 'finish'
+	let address = $derived(
+		access.hostname
+			? `https://${access.hostname.includes(':') ? `[${access.hostname}]` : access.hostname}`
+			: ''
+	);
+	let remote = $derived(
+		[
+			remoteAccess.tailscale
+				? remoteAccess.tailscaleFunnel
+					? t('complete-remote-tailscale-funnel')
+					: t('complete-remote-tailscale')
+				: '',
+			remoteAccess.cloudflared ? t('complete-remote-cloudflared') : ''
+		]
+			.filter(Boolean)
+			.join(', ') || t('complete-remote-none')
 	);
 </script>
 
-<StepLayout title={t('complete-title')} {onBack} {onContinue} {continueKey}>
-	<div class="summary-grid">
-		<div><span>{t('complete-hostname')}</span><strong>{hostname}</strong></div>
-		<div><span>{t('complete-administrator')}</span><strong>{administrator}</strong></div>
-		<div><span>{t('complete-tetra')}</span><strong>{t('complete-tetra-value')}</strong></div>
-		<div>
-			<span>{t('complete-dashboard')}</span><strong>{hostingLabel(hostingChoice)}</strong>
-		</div>
-	</div>
-	<div class="panel">
-		<div class="status-icon">i</div>
-		<div>
-			<h3>{t('local-recovery-title')}</h3>
-			<p>{t('local-recovery-description')}</p>
-		</div>
-	</div>
-	<div class="complete-actions">
-		<button type="button" class="primary-button" onclick={onReboot}>{t('reboot')}</button>
-		<button type="button" class="secondary-button" onclick={onShutdown}>{t('shutdown')}</button>
-	</div>
-</StepLayout>
+{#if finished}
+	<StepLayout title={t('finished-title')} description="" showActions={false}>
+		<Callout tone="success" role="status" title={t('finished-dashboard-starting')}>
+			<p>{t('finished-handoff', { seconds: finished.handoffInSeconds })}</p>
+			{#if finished.dashboardUrl}
+				<p>
+					<a class="dashboard-link code-value" href={finished.dashboardUrl}
+						>{finished.dashboardUrl}</a
+					>
+				</p>
+			{/if}
+		</Callout>
+	</StepLayout>
+{:else}
+	<StepLayout title={t('complete-title')} {onBack} {onContinue} continueKey="finish-setup">
+		<dl class="summary-list">
+			<div>
+				<dt>{t('complete-hostname')}</dt>
+				<dd>{hostname}</dd>
+			</div>
+			<div>
+				<dt>{t('complete-administrator')}</dt>
+				<dd>{administrator}</dd>
+			</div>
+			<div>
+				<dt>{t('complete-dashboard-address')}</dt>
+				<dd class="code-value">{address || '—'}</dd>
+			</div>
+			<div>
+				<dt>{t('complete-updates')}</dt>
+				<dd>{updatePolicy === 'notify' ? t('updates-notify') : t('updates-automatic')}</dd>
+			</div>
+			<div>
+				<dt>{t('complete-remote-access')}</dt>
+				<dd>{remote}</dd>
+			</div>
+			<div>
+				<dt>{t('complete-passkeys')}</dt>
+				<dd>
+					{access.mode === 'domain' ? t('complete-passkeys-yes') : t('complete-passkeys-no')}
+				</dd>
+			</div>
+		</dl>
+		<section class="power-section" aria-labelledby="power-heading">
+			<div>
+				<h3 id="power-heading">{t('complete-power-title')}</h3>
+				<p>{t('complete-power-description')}</p>
+			</div>
+			<div class="inline-actions">
+				<button type="button" class="secondary-button button-sm" onclick={onReboot}
+					>{t('reboot')}</button
+				>
+				<button type="button" class="secondary-button button-sm" onclick={onShutdown}
+					>{t('shutdown')}</button
+				>
+			</div>
+		</section>
+	</StepLayout>
+{/if}
 
 <style>
-	.complete-actions {
+	.power-section {
 		display: flex;
-		gap: 0.75rem;
-		margin-top: 1rem;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem 1rem;
+		border-top: 1px solid var(--border);
+		padding-top: 1.25rem;
 	}
-	.complete-actions button {
-		flex: 1;
+
+	.power-section h3 {
+		font-size: 0.875rem;
+		font-weight: 600;
+	}
+
+	.power-section p {
+		margin-top: 0.125rem;
+		color: var(--muted-foreground);
+		font-size: 0.75rem;
+	}
+
+	.dashboard-link {
+		color: var(--foreground);
+		font-weight: 600;
+		text-decoration: underline;
+		overflow-wrap: anywhere;
 	}
 </style>
