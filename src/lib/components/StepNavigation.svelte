@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Icon from './Icon.svelte';
-	import { t } from '$lib/i18n.svelte';
-	import type { OobeStep, StepId } from '$lib/oobe-state';
+	import { t } from '#lib/i18n.svelte.js';
+	import type { OobeStep, StepId } from '#lib/oobe-state.js';
 
 	let {
 		steps,

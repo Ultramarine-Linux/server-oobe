@@ -8,7 +8,7 @@ import {
 	fixtureSteps,
 	type OobeState,
 	type StepId
-} from '$lib/oobe-state';
+} from '#lib/oobe-state.js';
 
 /**
  * Port browsers use to reach the OOBE. Tetra serves it through Caddy with

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import StepLayout from '$lib/components/StepLayout.svelte';
-	import { t } from '$lib/i18n.svelte';
+	import StepLayout from '#lib/components/StepLayout.svelte';
+	import { t } from '#lib/i18n.svelte.js';
 	let deviceName = $state('');
 	let touched = $state(false);
 	let { hostname = $bindable(''), onBack, onContinue } = $props();

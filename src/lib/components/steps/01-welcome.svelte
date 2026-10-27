@@ -1,8 +1,8 @@
 <script lang="ts">
-	import Callout from '$lib/components/Callout.svelte';
-	import StepLayout from '$lib/components/StepLayout.svelte';
-	import { t } from '$lib/i18n.svelte';
-	import { FIXTURE_SETUP_CODE } from '$lib/fixture';
+	import Callout from '#lib/components/Callout.svelte';
+	import StepLayout from '#lib/components/StepLayout.svelte';
+	import { t } from '#lib/i18n.svelte.js';
+	import { FIXTURE_SETUP_CODE } from '#lib/fixture.js';
 	let {
 		onBack,
 		onContinue,

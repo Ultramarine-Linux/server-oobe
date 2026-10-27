@@ -1,7 +1,7 @@
 <script lang="ts">
-	import StepLayout from '$lib/components/StepLayout.svelte';
-	import { t } from '$lib/i18n.svelte';
-	import type { UpdatePolicy } from '$lib/oobe-state';
+	import StepLayout from '#lib/components/StepLayout.svelte';
+	import { t } from '#lib/i18n.svelte.js';
+	import type { UpdatePolicy } from '#lib/oobe-state.js';
 	let {
 		policy = $bindable<UpdatePolicy>('automatic'),
 		onBack,

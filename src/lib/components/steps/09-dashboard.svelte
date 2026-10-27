@@ -1,10 +1,10 @@
 <script lang="ts">
-	import Callout from '$lib/components/Callout.svelte';
-	import StepLayout from '$lib/components/StepLayout.svelte';
-	import { t } from '$lib/i18n.svelte';
-	import { DNS_PROVIDERS, dnsProvider, validateDnsCredentials } from '$lib/dns-providers';
-	import { ipFamily, stripBrackets, urlHost } from '$lib/net';
-	import type { AccessForm } from '$lib/oobe-state';
+	import Callout from '#lib/components/Callout.svelte';
+	import StepLayout from '#lib/components/StepLayout.svelte';
+	import { t } from '#lib/i18n.svelte.js';
+	import { DNS_PROVIDERS, dnsProvider, validateDnsCredentials } from '#lib/dns-providers.js';
+	import { ipFamily, stripBrackets, urlHost } from '#lib/net.js';
+	import type { AccessForm } from '#lib/oobe-state.js';
 	let {
 		form = $bindable<AccessForm>(),
 		ipAddresses = [],

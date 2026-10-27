@@ -1,10 +1,10 @@
 <script lang="ts">
-	import Callout from '$lib/components/Callout.svelte';
-	import Eap8021xFields from '$lib/components/Eap8021xFields.svelte';
-	import NetworkApplyStatus from '$lib/components/NetworkApplyStatus.svelte';
-	import StepLayout from '$lib/components/StepLayout.svelte';
-	import { eap8021xSettings, emptyEap8021xForm } from '$lib/eap-8021x';
-	import { t } from '$lib/i18n.svelte';
+	import Callout from '#lib/components/Callout.svelte';
+	import Eap8021xFields from '#lib/components/Eap8021xFields.svelte';
+	import NetworkApplyStatus from '#lib/components/NetworkApplyStatus.svelte';
+	import StepLayout from '#lib/components/StepLayout.svelte';
+	import { eap8021xSettings, emptyEap8021xForm } from '#lib/eap-8021x.js';
+	import { t } from '#lib/i18n.svelte.js';
 	import {
 		emptyIpForm,
 		interfaceType,
@@ -13,14 +13,14 @@
 		type Ipv4Method,
 		type Ipv6Method,
 		type NetworkConfigureRequest
-	} from '$lib/network-config';
+	} from '#lib/network-config.js';
 	import type {
 		NetworkApplyState,
 		NetworkCheck,
 		NetworkInterface,
 		WifiNetwork,
 		WifiSecurityProfile
-	} from '$lib/oobe-state';
+	} from '#lib/oobe-state.js';
 	let check = $state<NetworkCheck | null>(null);
 	let checking = $state(false);
 	let checkError = $state('');

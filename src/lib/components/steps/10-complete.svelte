@@ -1,13 +1,13 @@
 <script lang="ts">
-	import Callout from '$lib/components/Callout.svelte';
-	import StepLayout from '$lib/components/StepLayout.svelte';
-	import { t } from '$lib/i18n.svelte';
+	import Callout from '#lib/components/Callout.svelte';
+	import StepLayout from '#lib/components/StepLayout.svelte';
+	import { t } from '#lib/i18n.svelte.js';
 	import type {
 		AccessState,
 		RemoteAccessState,
 		SetupCompleteResult,
 		UpdatePolicy
-	} from '$lib/oobe-state';
+	} from '#lib/oobe-state.js';
 	let {
 		onBack,
 		onContinue,

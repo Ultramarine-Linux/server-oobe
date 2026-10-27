@@ -1,19 +1,19 @@
 <script lang="ts">
-	import Icon from '$lib/components/Icon.svelte';
-	import Shell from '$lib/components/Shell.svelte';
-	import WelcomeStep from '$lib/components/steps/01-welcome.svelte';
-	import DeviceNameStep from '$lib/components/steps/03-device-name.svelte';
-	import UserStep from '$lib/components/steps/04-user.svelte';
-	import PasswordStep from '$lib/components/steps/05-password.svelte';
-	import InternetStep from '$lib/components/steps/06-internet.svelte';
-	import UpdatesStep from '$lib/components/steps/07-updates.svelte';
-	import RemoteAccessStep from '$lib/components/steps/08-remote-access.svelte';
-	import SshKeyStep from '$lib/components/steps/08-ssh-key.svelte';
-	import DashboardStep from '$lib/components/steps/09-dashboard.svelte';
-	import CompleteStep from '$lib/components/steps/10-complete.svelte';
-	import { api, confirmNetworkChange, SetupSessionRequiredError } from '$lib/oobe-api';
-	import { oobeUrl } from '$lib/net';
-	import { expectedAddresses, type NetworkConfigureRequest } from '$lib/network-config';
+	import Icon from '#lib/components/Icon.svelte';
+	import Shell from '#lib/components/Shell.svelte';
+	import WelcomeStep from '#lib/components/steps/01-welcome.svelte';
+	import DeviceNameStep from '#lib/components/steps/03-device-name.svelte';
+	import UserStep from '#lib/components/steps/04-user.svelte';
+	import PasswordStep from '#lib/components/steps/05-password.svelte';
+	import InternetStep from '#lib/components/steps/06-internet.svelte';
+	import UpdatesStep from '#lib/components/steps/07-updates.svelte';
+	import RemoteAccessStep from '#lib/components/steps/08-remote-access.svelte';
+	import SshKeyStep from '#lib/components/steps/08-ssh-key.svelte';
+	import DashboardStep from '#lib/components/steps/09-dashboard.svelte';
+	import CompleteStep from '#lib/components/steps/10-complete.svelte';
+	import { api, confirmNetworkChange, SetupSessionRequiredError } from '#lib/oobe-api.js';
+	import { oobeUrl } from '#lib/net.js';
+	import { expectedAddresses, type NetworkConfigureRequest } from '#lib/network-config.js';
 	import {
 		fixtureState,
 		fixtureSteps,
@@ -27,10 +27,10 @@
 		type StepId,
 		type WifiNetwork,
 		type WifiSecurityProfile
-	} from '$lib/oobe-state';
+	} from '#lib/oobe-state.js';
 	import { onMount } from 'svelte';
-	import { detectLocale, t } from '$lib/i18n.svelte';
-	import { detectKeyboardLayout } from '$lib/keyboard-detect';
+	import { detectLocale, t } from '#lib/i18n.svelte.js';
+	import { detectKeyboardLayout } from '#lib/keyboard-detect.js';
 
 	let oobeState = $state<OobeState>(fixtureState);
 	let loaded = $state(false);
@@ -482,7 +482,7 @@
 			retryStep = null;
 			// Update local step status so sidebar shows the checkmark immediately
 			oobeState.steps = oobeState.steps.map((s) =>
-				s.id === step ? { ...s, status: 'complete' as import('$lib/oobe-state').StepStatus } : s
+				s.id === step ? { ...s, status: 'complete' as import('#lib/oobe-state.js').StepStatus } : s
 			);
 			const nextStep = fixtureSteps[currentIndex + 1]?.id;
 			if (nextStep) await saveActiveStep(nextStep);

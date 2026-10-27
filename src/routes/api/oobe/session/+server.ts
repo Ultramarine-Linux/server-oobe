@@ -1,13 +1,16 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { tetraClient, TetraError } from '$lib/server/tetra';
-import { MockTetraClient } from '$lib/server/tetra-mock';
-import { FIXTURE_HOST_COOKIE } from '$lib/fixture-hosts';
-import { checkSetupSession, clearSessionCookie, setSessionCookie } from '$lib/server/setup-session';
-import type { SessionResponse } from '$lib/oobe-state';
+import { tetraClient, TetraError } from '#lib/server/tetra.js';
+import { MockTetraClient } from '#lib/server/tetra-mock.js';
+import { FIXTURE_HOST_COOKIE } from '#lib/fixture-hosts.js';
+import {
+	checkSetupSession,
+	clearSessionCookie,
+	setSessionCookie
+} from '#lib/server/setup-session.js';
+import type { SessionResponse } from '#lib/oobe-state.js';
 
 function unavailable(e: unknown) {
-	return json(
+	return Response.json(
 		{
 			authenticated: false,
 			setupRequired: true,
@@ -23,11 +26,11 @@ export const GET: RequestHandler = async ({ cookies }) => {
 	const session = await checkSetupSession(cookies);
 	if (session.status === 'unavailable') return unavailable(new Error(session.message));
 	if (session.status === 'valid') {
-		return json({ authenticated: true, setupRequired: true } satisfies SessionResponse);
+		return Response.json({ authenticated: true, setupRequired: true } satisfies SessionResponse);
 	}
 	try {
 		const { setupRequired } = await tetraClient().setupStatus();
-		return json({ authenticated: false, setupRequired } satisfies SessionResponse);
+		return Response.json({ authenticated: false, setupRequired } satisfies SessionResponse);
 	} catch (e) {
 		return unavailable(e);
 	}
@@ -43,7 +46,7 @@ export const POST: RequestHandler = async ({ request, cookies, url, getClientAdd
 		// Treated as an empty code below.
 	}
 	if (!code || code.length > 64) {
-		return json(
+		return Response.json(
 			{
 				authenticated: false,
 				setupRequired: true,
@@ -62,7 +65,7 @@ export const POST: RequestHandler = async ({ request, cookies, url, getClientAdd
 			client.useFixtureHost(session.token, cookies.get(FIXTURE_HOST_COOKIE));
 		}
 		setSessionCookie(cookies, session, url.protocol === 'https:');
-		return json({
+		return Response.json({
 			authenticated: true,
 			setupRequired: true,
 			adminExists: session.adminExists
@@ -72,7 +75,7 @@ export const POST: RequestHandler = async ({ request, cookies, url, getClientAdd
 		if (!(e instanceof TetraError)) throw e;
 		switch (e.code) {
 			case 'invalid_credentials':
-				return json(
+				return Response.json(
 					{
 						authenticated: false,
 						setupRequired: true,
@@ -81,7 +84,7 @@ export const POST: RequestHandler = async ({ request, cookies, url, getClientAdd
 					{ status: 401 }
 				);
 			case 'rate_limited':
-				return json(
+				return Response.json(
 					{
 						authenticated: false,
 						setupRequired: true,
@@ -91,7 +94,7 @@ export const POST: RequestHandler = async ({ request, cookies, url, getClientAdd
 					{ status: 429, headers: e.retryAfter ? { 'Retry-After': String(e.retryAfter) } : {} }
 				);
 			case 'setup_complete':
-				return json(
+				return Response.json(
 					{
 						authenticated: false,
 						setupRequired: false,

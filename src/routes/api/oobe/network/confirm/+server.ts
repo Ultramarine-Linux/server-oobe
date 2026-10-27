@@ -1,7 +1,6 @@
-import { json } from '@sveltejs/kit';
-import { validateWithLibtaidan } from '$lib/server/libtaidan';
-import { CHANGE_ID_PATTERN, confirmChange } from '$lib/server/network-change';
-import { tetraNetworkConfirm } from '$lib/server/tetra';
+import { validateWithLibtaidan } from '#lib/server/libtaidan.js';
+import { CHANGE_ID_PATTERN, confirmChange } from '#lib/server/network-change.js';
+import { tetraNetworkConfirm } from '#lib/server/tetra.js';
 import type { RequestHandler } from './$types';
 
 // Keeps a network change Tetra would otherwise roll back (network-change.ts).
@@ -18,15 +17,15 @@ export const POST: RequestHandler = async ({ request }) => {
 		// Rejected below.
 	}
 	if (!CHANGE_ID_PATTERN.test(changeId)) {
-		return json({ status: 'unknown', message: 'Invalid change id' }, { status: 400 });
+		return Response.json({ status: 'unknown', message: 'Invalid change id' }, { status: 400 });
 	}
 	try {
 		await validateWithLibtaidan('internet', 'network.confirm', { changeId });
 	} catch (e) {
-		return json(
+		return Response.json(
 			{ status: 'failed', message: e instanceof Error ? e.message : 'libtaidan validation failed' },
 			{ status: 403 }
 		);
 	}
-	return json(await confirmChange(changeId, tetraNetworkConfirm));
+	return Response.json(await confirmChange(changeId, tetraNetworkConfirm));
 };

@@ -1,5 +1,5 @@
 <script lang="ts" module>
-	import type { StepId } from '$lib/oobe-state';
+	import type { StepId } from '#lib/oobe-state.js';
 
 	/** The step being shown, for StepLayout's heading and step counter. */
 	export type StepContext = {
@@ -16,9 +16,9 @@
 	import Header from './Header.svelte';
 	import StepNavigation from './StepNavigation.svelte';
 	import Icon from './Icon.svelte';
-	import { appearance } from '$lib/appearance.svelte';
-	import { t } from '$lib/i18n.svelte';
-	import type { OobeStep } from '$lib/oobe-state';
+	import { appearance } from '#lib/appearance.svelte.js';
+	import { t } from '#lib/i18n.svelte.js';
+	import type { OobeStep } from '#lib/oobe-state.js';
 	import { onMount, setContext, type Snippet } from 'svelte';
 
 	let {

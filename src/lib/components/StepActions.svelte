@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { getContext } from 'svelte';
-	import { t } from '$lib/i18n.svelte';
+	import { t } from '#lib/i18n.svelte.js';
 	import { stepContextKey, type StepContext } from './Shell.svelte';
 	let {
 		canContinue = true,

@@ -19,8 +19,12 @@
 		)
 	};
 
+	/** SvelteKit 3 treats any `server.*` file as server-only, so these live under another name. */
+	const aliases: Record<string, string> = { server: 'server-rack' };
+
 	function source(name: string): string {
-		return glyphs[name] ?? nucleo[`../icons/${name}.svg`] ?? '';
+		const file = aliases[name] ?? name;
+		return glyphs[name] ?? nucleo[`../icons/${file}.svg`] ?? '';
 	}
 </script>
 

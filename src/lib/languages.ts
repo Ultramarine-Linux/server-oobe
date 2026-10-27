@@ -1,4 +1,4 @@
-import { availableLocales } from '$lib/i18n.svelte';
+import { availableLocales } from '#lib/i18n.svelte.js';
 
 export type Language = {
 	locale: string;

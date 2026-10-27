@@ -1,8 +1,7 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { loadState, saveState } from '$lib/server/state';
+import { loadState, saveState } from '#lib/server/state.js';
 
-export const GET: RequestHandler = async () => json(await loadState());
+export const GET: RequestHandler = async () => Response.json(await loadState());
 
 export const POST: RequestHandler = async ({ request }) => {
 	const body = (await request.json()) as {
@@ -16,5 +15,5 @@ export const POST: RequestHandler = async ({ request }) => {
 		});
 	}
 	await saveState(state);
-	return json(state);
+	return Response.json(state);
 };

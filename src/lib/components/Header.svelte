@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Icon from './Icon.svelte';
-	import { appearance } from '$lib/appearance.svelte';
-	import { t } from '$lib/i18n.svelte';
+	import { appearance } from '#lib/appearance.svelte.js';
+	import { t } from '#lib/i18n.svelte.js';
 
 	let {
 		stepLabel,

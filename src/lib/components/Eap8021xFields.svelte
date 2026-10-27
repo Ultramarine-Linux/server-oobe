@@ -1,6 +1,11 @@
 <script lang="ts">
-	import { t } from '$lib/i18n.svelte';
-	import { isTunneled, type Eap8021xForm, type EapMethod, type Phase2Method } from '$lib/eap-8021x';
+	import { t } from '#lib/i18n.svelte.js';
+	import {
+		isTunneled,
+		type Eap8021xForm,
+		type EapMethod,
+		type Phase2Method
+	} from '#lib/eap-8021x.js';
 
 	type PemField = 'caCert' | 'clientCert' | 'privateKey';
 

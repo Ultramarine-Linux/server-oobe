@@ -1,7 +1,6 @@
-import { json } from '@sveltejs/kit';
 import { networkInterfaces } from 'node:os';
-import { FIXTURE_HOST_COOKIE, fixtureHost } from '$lib/fixture-hosts';
-import { addressScope, isRoutable } from '$lib/net';
+import { FIXTURE_HOST_COOKIE, fixtureHost } from '#lib/fixture-hosts.js';
+import { addressScope, isRoutable } from '#lib/net.js';
 import type { RequestHandler } from './$types';
 
 const FIXTURE_MODE = process.env.OOBE_FIXTURE_MODE === 'true';
@@ -25,5 +24,5 @@ export const GET: RequestHandler = ({ cookies }) => {
 		...routable.filter((address) => address.includes(':'))
 	];
 
-	return json({ addresses: [...new Set(addresses)] });
+	return Response.json({ addresses: [...new Set(addresses)] });
 };

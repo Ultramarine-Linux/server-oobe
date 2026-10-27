@@ -1,14 +1,14 @@
-import { json, error } from '@sveltejs/kit';
+import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { isIP } from 'node:net';
 import { spawn } from 'node:child_process';
-import { loadState, saveState } from '$lib/server/state';
-import { validateWithLibtaidan } from '$lib/server/libtaidan';
-import { applyChange, CHANGE_ID_PATTERN } from '$lib/server/network-change';
-import { checkNetwork } from '$lib/server/network-check';
-import { validateNetworkConfig } from '$lib/server/network-config';
-import { INTERFACE_TYPES } from '$lib/network-config';
-import { SETUP_SESSION_COOKIE } from '$lib/server/setup-session';
+import { loadState, saveState } from '#lib/server/state.js';
+import { validateWithLibtaidan } from '#lib/server/libtaidan.js';
+import { applyChange, CHANGE_ID_PATTERN } from '#lib/server/network-change.js';
+import { checkNetwork } from '#lib/server/network-check.js';
+import { validateNetworkConfig } from '#lib/server/network-config.js';
+import { INTERFACE_TYPES } from '#lib/network-config.js';
+import { SETUP_SESSION_COOKIE } from '#lib/server/setup-session.js';
 import {
 	tetraClient,
 	TetraError,
@@ -29,15 +29,15 @@ import {
 	tetraTailscaleUp,
 	type AccessRequest,
 	type TetraResponse
-} from '$lib/server/tetra';
-import { validateDnsCredentials } from '$lib/dns-providers';
-import { validateEap8021x } from '$lib/eap-8021x';
+} from '#lib/server/tetra.js';
+import { validateDnsCredentials } from '#lib/dns-providers.js';
+import { validateEap8021x } from '#lib/eap-8021x.js';
 import type {
 	NetworkInterface,
 	OperationResult,
 	StepId,
 	WifiSecurityProfile
-} from '$lib/oobe-state';
+} from '#lib/oobe-state.js';
 
 // Every operation that changes the host is a Tetra call made with the
 // caller's setup session token. The OOBE runs unprivileged and changes
@@ -205,12 +205,12 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 		const { step, operation, payload = {} } = body;
 		const opId = `op-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 		if (!step || !ALLOWED_OPERATIONS.has(operation)) {
-			return json(result(opId, step, 'failed', false, 'Unsupported setup operation'));
+			return Response.json(result(opId, step, 'failed', false, 'Unsupported setup operation'));
 		}
 		try {
 			await validateWithLibtaidan(step, operation, payload);
 		} catch (e) {
-			return json(
+			return Response.json(
 				result(
 					opId,
 					step,
@@ -223,7 +223,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 
 		/** Map a Tetra module response to an operation result. */
 		const fromTetra = (resp: TetraResponse, failure: string, message?: string) =>
-			json(
+			Response.json(
 				resp.ok
 					? result(opId, step, 'succeeded', false, message)
 					: result(opId, step, 'failed', true, resp.error || failure)
@@ -251,23 +251,24 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 					});
 				}
 				await saveState(state);
-				return json(result(opId, step, 'succeeded', false));
+				return Response.json(result(opId, step, 'succeeded', false));
 			}
 
 			case 'state.reset': {
 				// Development and tests only.
-				if (!FIXTURE_MODE) return json(result(opId, step, 'failed', false, 'Not available'));
+				if (!FIXTURE_MODE)
+					return Response.json(result(opId, step, 'failed', false, 'Not available'));
 				state.activeStep = 'welcome';
 				state.completed = false;
 				state.steps = state.steps.map((current) => ({ ...current, status: 'pending' }));
 				await saveState(state);
-				return json(result(opId, step, 'succeeded', false));
+				return Response.json(result(opId, step, 'succeeded', false));
 			}
 
 			case 'hostname.apply': {
 				const hostname = payload.hostname as string;
 				if (!hostname || !HOSTNAME_PATTERN.test(hostname)) {
-					return json(result(opId, step, 'failed', true, 'Invalid hostname'));
+					return Response.json(result(opId, step, 'failed', true, 'Invalid hostname'));
 				}
 				const resp = await tetraSetHostname(token, hostname);
 				if (resp.ok) {
@@ -281,10 +282,10 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 				const layout = payload.layout as string;
 				const variant = (payload.variant as string) || '';
 				if (!layout || !/^[a-zA-Z0-9_-]+$/.test(layout)) {
-					return json(result(opId, step, 'failed', true, 'Invalid keyboard layout'));
+					return Response.json(result(opId, step, 'failed', true, 'Invalid keyboard layout'));
 				}
 				if (variant && !/^[a-zA-Z0-9_-]+$/.test(variant)) {
-					return json(result(opId, step, 'failed', true, 'Invalid keyboard variant'));
+					return Response.json(result(opId, step, 'failed', true, 'Invalid keyboard variant'));
 				}
 				const resp = await tetraSetKeymap(token, layout, variant || undefined);
 				if (resp.ok) {
@@ -298,7 +299,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 			case 'user.create': {
 				const name = payload.name as string;
 				if (!name || !/^[a-z_][a-z0-9_-]*$/.test(name)) {
-					return json(result(opId, step, 'failed', true, 'Invalid username'));
+					return Response.json(result(opId, step, 'failed', true, 'Invalid username'));
 				}
 				// Every host change goes through Tetra. If Tetra cannot create the
 				// account, the step fails; there is no local fallback.
@@ -309,20 +310,20 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 				if (!admin.ok) return fromTetra(admin, 'Tetra could not make the user an administrator');
 				state.administrator = name;
 				await saveState(state);
-				return json(result(opId, step, 'succeeded', false));
+				return Response.json(result(opId, step, 'succeeded', false));
 			}
 
 			case 'password.set': {
 				const name = payload.name as string;
 				const plaintext = payload.password as string;
 				if (!name || !plaintext) {
-					return json(result(opId, step, 'failed', true, 'Missing user or password'));
+					return Response.json(result(opId, step, 'failed', true, 'Missing user or password'));
 				}
 				let passwordHash: string;
 				try {
 					passwordHash = await hashPassword(plaintext);
 				} catch (e) {
-					return json(
+					return Response.json(
 						result(opId, step, 'failed', true, e instanceof Error ? e.message : 'Hashing failed')
 					);
 				}
@@ -335,10 +336,12 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 			case 'ssh-key.apply': {
 				const publicKey = typeof payload.publicKey === 'string' ? payload.publicKey.trim() : '';
 				if (!SSH_KEY_PATTERN.test(publicKey) || publicKey.includes('\n')) {
-					return json(result(opId, step, 'failed', true, 'Invalid SSH public key'));
+					return Response.json(result(opId, step, 'failed', true, 'Invalid SSH public key'));
 				}
 				if (!state.administrator) {
-					return json(result(opId, step, 'failed', true, 'Create the administrator first'));
+					return Response.json(
+						result(opId, step, 'failed', true, 'Create the administrator first')
+					);
 				}
 				const resp = await tetraSetAuthorizedKeys(token, state.administrator, [publicKey]);
 				if (resp.ok) {
@@ -354,18 +357,18 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 				const interfaces = networkInterfaces(resp.payload?.interfaces);
 				state.networkInterfaces = interfaces;
 				await saveState(state);
-				return json(result(opId, step, 'succeeded', false, JSON.stringify(interfaces)));
+				return Response.json(result(opId, step, 'succeeded', false, JSON.stringify(interfaces)));
 			}
 
 			case 'network.scan_wifi': {
 				const interfaceName = payload.interface as string;
 				if (!interfaceName || !/^[a-zA-Z0-9_.-]+$/.test(interfaceName)) {
-					return json(result(opId, step, 'failed', true, 'Invalid Wi-Fi interface'));
+					return Response.json(result(opId, step, 'failed', true, 'Invalid Wi-Fi interface'));
 				}
 				const resp = await tetraNetworkScanWifi(token, interfaceName);
 				if (!resp.ok) return fromTetra(resp, 'Wi-Fi scan failed');
 				const networks = Array.isArray(resp.payload?.networks) ? resp.payload.networks : [];
-				return json(result(opId, step, 'succeeded', false, JSON.stringify(networks)));
+				return Response.json(result(opId, step, 'succeeded', false, JSON.stringify(networks)));
 			}
 
 			case 'network.connect_wifi': {
@@ -373,28 +376,32 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 				const id = changeId(payload);
 				const interfaceName = request.interface as string;
 				const ssid = request.ssid as string;
-				if (!id) return json(result(opId, step, 'failed', true, 'Missing change id'));
+				if (!id) return Response.json(result(opId, step, 'failed', true, 'Missing change id'));
 				if (!interfaceName || !/^[a-zA-Z0-9_.-]+$/.test(interfaceName) || !ssid) {
-					return json(result(opId, step, 'failed', true, 'Wi-Fi interface and SSID are required'));
+					return Response.json(
+						result(opId, step, 'failed', true, 'Wi-Fi interface and SSID are required')
+					);
 				}
 				const security = wifiSecurity(request.security);
-				if (typeof security === 'string') return json(result(opId, step, 'failed', true, security));
+				if (typeof security === 'string')
+					return Response.json(result(opId, step, 'failed', true, security));
 				const resp = await applyChange(id, token, () =>
 					tetraNetworkConnectWifi(token, interfaceName, ssid, request.hidden === true, security)
 				);
 				if (!resp.ok) return fromTetra(resp, 'Wi-Fi connection failed');
-				return json(result(opId, step, 'succeeded', false, changeResult(resp)));
+				return Response.json(result(opId, step, 'succeeded', false, changeResult(resp)));
 			}
 
 			case 'network.configure': {
 				const { changeId: _, ...request } = payload;
 				const id = changeId(payload);
-				if (!id) return json(result(opId, step, 'failed', true, 'Missing change id'));
+				if (!id) return Response.json(result(opId, step, 'failed', true, 'Missing change id'));
 				const config = validateNetworkConfig(request);
-				if (typeof config === 'string') return json(result(opId, step, 'failed', true, config));
+				if (typeof config === 'string')
+					return Response.json(result(opId, step, 'failed', true, config));
 				const resp = await applyChange(id, token, () => tetraNetworkConfigure(token, config));
 				if (!resp.ok) return fromTetra(resp, 'Network configuration failed');
-				return json(result(opId, step, 'succeeded', false, changeResult(resp)));
+				return Response.json(result(opId, step, 'succeeded', false, changeResult(resp)));
 			}
 
 			case 'network.check': {
@@ -406,13 +413,13 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 					resp.payload?.interfaces,
 					FIXTURE_MODE ? async () => true : undefined
 				);
-				return json(result(opId, step, 'succeeded', false, JSON.stringify(check)));
+				return Response.json(result(opId, step, 'succeeded', false, JSON.stringify(check)));
 			}
 
 			case 'updates.set_policy': {
 				const policy = payload.policy;
 				if (policy !== 'automatic' && policy !== 'notify') {
-					return json(result(opId, step, 'failed', true, 'Choose an update policy'));
+					return Response.json(result(opId, step, 'failed', true, 'Choose an update policy'));
 				}
 				const resp = await tetraSetUpdatePolicy(token, { policy });
 				if (resp.ok) {
@@ -425,26 +432,30 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 			case 'remote_access.status': {
 				const resp = await tetraRemoteAccessStatus(token);
 				if (!resp.ok) return fromTetra(resp, 'Failed to read remote access status');
-				return json(result(opId, step, 'succeeded', false, JSON.stringify(resp.status)));
+				return Response.json(result(opId, step, 'succeeded', false, JSON.stringify(resp.status)));
 			}
 
 			case 'remote_access.tailscale_up': {
 				// The auth key goes straight to Tetra and is never stored.
 				const authKey = secretValue(payload.auth_key, 512);
 				if (!authKey || !authKey.startsWith('tskey-')) {
-					return json(result(opId, step, 'failed', true, 'Enter a Tailscale auth key (tskey-…)'));
+					return Response.json(
+						result(opId, step, 'failed', true, 'Enter a Tailscale auth key (tskey-…)')
+					);
 				}
 				const serve = payload.serve !== false;
 				const funnel = payload.funnel === true;
 				// Funnel publishes the dashboard on the internet; the user must
 				// have confirmed the warning.
 				if (funnel && payload.confirmFunnel !== true) {
-					return json(
+					return Response.json(
 						result(opId, step, 'failed', true, 'Confirm that the dashboard will be public')
 					);
 				}
 				if (funnel && !serve) {
-					return json(result(opId, step, 'failed', true, 'Funnel requires Tailscale Serve'));
+					return Response.json(
+						result(opId, step, 'failed', true, 'Funnel requires Tailscale Serve')
+					);
 				}
 				const resp = await tetraTailscaleUp(token, { auth_key: authKey, serve, funnel });
 				if (resp.ok) {
@@ -463,7 +474,9 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 				// The tunnel token goes straight to Tetra and is never stored.
 				const tunnelToken = secretValue(payload.token);
 				if (!tunnelToken) {
-					return json(result(opId, step, 'failed', true, 'Enter a Cloudflare Tunnel token'));
+					return Response.json(
+						result(opId, step, 'failed', true, 'Enter a Cloudflare Tunnel token')
+					);
 				}
 				const resp = await tetraCloudflaredSetToken(token, { token: tunnelToken });
 				if (resp.ok) {
@@ -475,7 +488,8 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 
 			case 'access.set': {
 				const access = accessRequest(payload);
-				if (typeof access === 'string') return json(result(opId, step, 'failed', true, access));
+				if (typeof access === 'string')
+					return Response.json(result(opId, step, 'failed', true, access));
 				try {
 					const applied = await tetraClient().setAccess(token, access);
 					// DNS provider credentials are deliberately left out.
@@ -491,10 +505,10 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 						passkeysAvailable: applied.passkeysAvailable
 					};
 					await saveState(state);
-					return json(result(opId, step, 'succeeded', false, JSON.stringify(applied)));
+					return Response.json(result(opId, step, 'succeeded', false, JSON.stringify(applied)));
 				} catch (e) {
 					if (!(e instanceof TetraError)) throw e;
-					return json(result(opId, step, 'failed', true, e.message));
+					return Response.json(result(opId, step, 'failed', true, e.message));
 				}
 			}
 
@@ -517,19 +531,21 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 					state.completed = true;
 					await saveState(state);
 					cookies.delete(SETUP_SESSION_COOKIE, { path: '/' });
-					return json(result(opId, step, 'succeeded', false, JSON.stringify(completed)));
+					return Response.json(result(opId, step, 'succeeded', false, JSON.stringify(completed)));
 				} catch (e) {
 					if (!(e instanceof TetraError)) throw e;
 					const message =
 						e.code === 'setup_incomplete'
 							? 'Create an administrator account before finishing setup'
 							: e.message;
-					return json(result(opId, step, 'failed', e.code !== 'setup_complete', message));
+					return Response.json(result(opId, step, 'failed', e.code !== 'setup_complete', message));
 				}
 			}
 
 			default:
-				return json(result(opId, step, 'failed', false, `Unknown operation: ${operation}`));
+				return Response.json(
+					result(opId, step, 'failed', false, `Unknown operation: ${operation}`)
+				);
 		}
 	} catch (err) {
 		console.error('Operation failed:', err instanceof Error ? err.message : 'unknown error');

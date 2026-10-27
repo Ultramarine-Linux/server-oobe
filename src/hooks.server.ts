@@ -1,5 +1,5 @@
-import { json, type Handle } from '@sveltejs/kit';
-import { checkSetupSession, clearSessionCookie } from '$lib/server/setup-session';
+import type { Handle } from '@sveltejs/kit/hooks';
+import { checkSetupSession, clearSessionCookie } from '#lib/server/setup-session.js';
 
 /**
  * API routes that work without a setup session: redeeming the setup code, the
@@ -14,11 +14,14 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (path.startsWith('/api/') && !PUBLIC_API.has(path)) {
 		const session = await checkSetupSession(event.cookies);
 		if (session.status === 'unavailable') {
-			return json({ message: `Tetra is unavailable: ${session.message}` }, { status: 503 });
+			return Response.json(
+				{ message: `Tetra is unavailable: ${session.message}` },
+				{ status: 503 }
+			);
 		}
 		if (session.status === 'missing') {
 			clearSessionCookie(event.cookies);
-			return json(
+			return Response.json(
 				{ message: 'Enter the setup code shown on the server console to continue.' },
 				{ status: 401 }
 			);

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import type { StepId } from '$lib/oobe-state';
+import type { StepId } from '#lib/oobe-state.js';
 
 const FIXTURE_MODE = process.env.OOBE_FIXTURE_MODE === 'true';
 

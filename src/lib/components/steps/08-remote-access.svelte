@@ -1,8 +1,8 @@
 <script lang="ts">
-	import Callout from '$lib/components/Callout.svelte';
-	import StepLayout from '$lib/components/StepLayout.svelte';
-	import { t } from '$lib/i18n.svelte';
-	import type { RemoteAccessForm } from '$lib/oobe-state';
+	import Callout from '#lib/components/Callout.svelte';
+	import StepLayout from '#lib/components/StepLayout.svelte';
+	import { t } from '#lib/i18n.svelte.js';
+	import type { RemoteAccessForm } from '#lib/oobe-state.js';
 	let {
 		form = $bindable<RemoteAccessForm>(),
 		onBack,
